@@ -119,11 +119,18 @@ sqlplus billrun/password@//host/service @uninstall.sql
 A month of made up traffic, end to end:
 
 ```sql
-exec billing_demo.add_customers(100, date '2026-01-01')
-select billing_admin.open_cycle(date '2026-03-01') from dual;
-exec billing_demo.stage_usage('switch-01.csv', 10000, date '2026-03-01')
-exec billing_jobs.process_usage
-select billing_run.bill_cycle(cycle_id) from bill_cycles where period_start = date '2026-03-01';
+declare
+  l_cycle    number;
+  l_invoices pls_integer;
+begin
+  billing_demo.add_customers(100, date '2026-01-01');
+  l_cycle := billing_admin.open_cycle(date '2026-03-01');
+  billing_demo.stage_usage('switch-01.csv', 10000, date '2026-03-01');
+  billing_jobs.process_usage;  -- commits
+  l_invoices := billing_run.bill_cycle(l_cycle);
+  commit;
+end;
+/
 select * from problems;
 select * from usage_by_destination;
 ```
