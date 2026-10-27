@@ -76,8 +76,9 @@ create or replace package body billing_load as
     l_directory  varchar2(128) := dbms_assert.simple_sql_name(p_directory);
     l_n          pls_integer;
   begin
-    -- The names go into the statement's text, not binds, so both are
-    -- checked first: a directory has to be a plain identifier and a file
+    -- Oracle refuses binds in a statement with an inline external table
+    -- (ORA-14355), so the names go into its text, and both are checked
+    -- first: a directory has to be a plain identifier and a file
     -- a plain name, with no path in it.
     if not regexp_like(p_file_name, '^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$') then
       raise_application_error(billing_errors.bad_file, 'not a plain file name: "' || p_file_name || '"');
@@ -87,7 +88,7 @@ create or replace package body billing_load as
     -- trimmed of CR here, as stage_csv does, before it's split.
     execute immediate q'[
       insert into cdr_staging (file_name, line_no, fields, msisdn, service, called, started_at, quantity)
-      select :file_name, line_no, regexp_count(line, ',') + 1,
+      select ]' || dbms_assert.enquote_literal(p_file_name) || q'[, line_no, regexp_count(line, ',') + 1,
              substr(trim(regexp_substr(line, '([^,]*)(,|$)', 1, 1, null, 1)), 1, 100),
              substr(trim(regexp_substr(line, '([^,]*)(,|$)', 1, 2, null, 1)), 1, 100),
              substr(trim(regexp_substr(line, '([^,]*)(,|$)', 1, 3, null, 1)), 1, 100),
@@ -105,8 +106,7 @@ create or replace package body billing_load as
                        location (]' || dbms_assert.enquote_literal(p_file_name) || q'[)
                        reject limit unlimited) f)
        where trim(line) is not null
-         and not (line_no = 1 and lower(line) like 'msisdn,%')]'
-      using p_file_name;
+         and not (line_no = 1 and lower(line) like 'msisdn,%')]';
     l_n := sql%rowcount;
     billing_log.info('billing_load', 'staged ' || l_n || ' lines from ' || l_directory || '/' || p_file_name);
     return l_n;
