@@ -449,14 +449,17 @@ create or replace package body billing_rate as
       flush_usage;
 
       l_done := l_done + l_rows.count;
+      billing_log.progress('rate_pending', l_done);
     end loop;
     close c_new;
+    billing_log.idle;
     return l_done;
   exception
     when others then
       if c_new%isopen then
         close c_new;
       end if;
+      billing_log.idle;
       raise;
   end rate_range;
 

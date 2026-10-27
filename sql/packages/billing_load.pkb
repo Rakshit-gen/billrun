@@ -275,14 +275,17 @@ create or replace package body billing_load as
          where staging_id = l_ids(i);
 
       l_done := l_done + l_rows.count;
+      billing_log.progress('load_staged', l_done);
     end loop;
     close c_new;
+    billing_log.idle;
     return l_done;
   exception
     when others then
       if c_new%isopen then
         close c_new;
       end if;
+      billing_log.idle;
       raise;
   end load_staged;
 

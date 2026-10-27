@@ -24,5 +24,17 @@ create or replace package body billing_log as
           dbms_utility.format_error_backtrace);
   end error;
 
+  procedure progress(p_action varchar2, p_done number) is
+  begin
+    dbms_application_info.set_module('billrun', p_action);
+    dbms_application_info.set_client_info(p_done || ' rows done');
+  end progress;
+
+  procedure idle is
+  begin
+    dbms_application_info.set_module(null, null);
+    dbms_application_info.set_client_info(null);
+  end idle;
+
 end billing_log;
 /
