@@ -105,3 +105,53 @@ run at 02:00 on the 1st, through DBMS_SCHEDULER.
 - **Jobs.** `billing_jobs.create_jobs` sets up the two DBMS_SCHEDULER
   jobs. The job procedures are the only code that commits: a batch at a
   time, so a crash loses one batch.
+
+## Running it
+
+Any Oracle 19c or later schema with CREATE TABLE, VIEW, PROCEDURE,
+TRIGGER and JOB, and quota on its tablespace:
+
+```
+sqlplus billrun/password@//host/service @install.sql
+sqlplus billrun/password@//host/service @uninstall.sql
+```
+
+A month of made up traffic, end to end:
+
+```sql
+exec billing_demo.add_customers(100, date '2026-01-01')
+select billing_admin.open_cycle(date '2026-03-01') from dual;
+exec billing_demo.stage_usage('switch-01.csv', 10000, date '2026-03-01')
+exec billing_jobs.process_usage
+select billing_run.bill_cycle(cycle_id) from bill_cycles where period_start = date '2026-03-01';
+select * from problems;
+select * from usage_by_destination;
+```
+
+With Docker or Podman, `make db` starts Oracle Free 23ai and `make ci`
+installs utPLSQL and billrun, runs the tests and the benchmark: the same
+`scripts/ci.sh` that GitHub Actions runs.
+
+## Tests
+
+utPLSQL suites in `test/`, one per package, each test in a transaction
+that's rolled back. The fixture builds two plans with round prices, so
+expected amounts can be worked out by hand: a plan change on the 11th of
+January charges 10/31 of one fee and 21/31 of the other.
+
+## Limits
+
+- Bill cycles are calendar months, one for everyone.
+- Allowances aren't prorated: a line that joins on the 20th gets the
+  whole month's.
+- One currency, and one tax rate per customer.
+- Staging takes comma separated files without quoting.
+
+## Credits
+
+Tests run on [utPLSQL](https://github.com/utPLSQL/utPLSQL) (Apache 2.0).
+CI uses Gerald Venzl's [Oracle Free images](https://github.com/gvenzl/oci-oracle-free)
+and the [setup-oracle-free](https://github.com/gvenzl/setup-oracle-free)
+action.
+
+MIT licensed.
