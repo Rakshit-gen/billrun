@@ -8,8 +8,8 @@ create or replace package body billing_ar as
     select customer_id into l_id from customers where customer_id = p_customer_id for update;
   end lock_customer;
 
-  -- Back to ACTIVE once nothing is past due.
-  procedure reactivate(p_customer_id customers.customer_id%type) is
+  -- Back to ACTIVE once nothing is past due on p_as_of.
+  procedure reactivate(p_customer_id customers.customer_id%type, p_as_of date) is
   begin
     update customers c
        set c.status = 'ACTIVE'
@@ -18,7 +18,7 @@ create or replace package body billing_ar as
        and not exists (select null
                          from invoices i
                         where i.customer_id = c.customer_id
-                          and i.due_date < trunc(sysdate)
+                          and i.due_date < trunc(p_as_of)
                           and i.total > (select nvl(sum(a.amount), 0)
                                            from payment_allocations a
                                           where a.invoice_id = i.invoice_id));
@@ -55,7 +55,7 @@ create or replace package body billing_ar as
           || ', amount ' || to_char(l_seen.amount, 'FM999999990.00'));
     end;
     l_n := allocate(p_customer_id);
-    reactivate(p_customer_id);
+    reactivate(p_customer_id, p_received_on);
     return l_id;
   end record_payment;
 
@@ -105,6 +105,15 @@ create or replace package body billing_ar as
     l_n := sql%rowcount;
     return l_n;
   end allocate;
+
+  function allocate_all return pls_integer is
+    l_n pls_integer := 0;
+  begin
+    for c in (select distinct customer_id from payments order by customer_id) loop
+      l_n := l_n + allocate(c.customer_id);
+    end loop;
+    return l_n;
+  end allocate_all;
 
   function open_amount(p_invoice_id invoices.invoice_id%type) return number is
     l_open number;
@@ -163,15 +172,23 @@ create or replace package body billing_ar as
   begin
     for r in (
       with open_invoices as (
+        -- Only money received by p_as_of counts, so a past date gives
+        -- the picture as it was then.
         select i.customer_id, l_as_of - i.due_date as overdue,
-               i.total - nvl((select sum(a.amount) from payment_allocations a
-                               where a.invoice_id = i.invoice_id), 0) as open_amount
+               i.total - nvl((select sum(a.amount)
+                                from payment_allocations a
+                                join payments p on p.payment_id = a.payment_id
+                               where a.invoice_id = i.invoice_id
+                                 and p.received_on <= l_as_of), 0) as open_amount
           from invoices i
          where i.issued_at <= l_as_of
       ), unallocated as (
         select p.customer_id,
-               sum(p.amount - nvl((select sum(a.amount) from payment_allocations a
-                                    where a.payment_id = p.payment_id), 0)) as amount
+               sum(p.amount - nvl((select sum(a.amount)
+                                     from payment_allocations a
+                                     join invoices i on i.invoice_id = a.invoice_id
+                                    where a.payment_id = p.payment_id
+                                      and i.issued_at <= l_as_of), 0)) as amount
           from payments p
          where p.received_on <= l_as_of
          group by p.customer_id

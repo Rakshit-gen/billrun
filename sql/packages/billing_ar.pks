@@ -24,6 +24,9 @@ create or replace package billing_ar as
   -- Returns the number of allocations made.
   function allocate(p_customer_id customers.customer_id%type) return pls_integer;
 
+  -- allocate for every customer with payments.
+  function allocate_all return pls_integer;
+
   -- What's still owed on an invoice.
   function open_amount(p_invoice_id invoices.invoice_id%type) return number;
 
