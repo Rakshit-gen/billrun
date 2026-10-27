@@ -74,7 +74,7 @@ fi
 echo "== Benchmark"
 sql /tmp/billrun "$app" @bench/bench.sql </dev/null
 
-echo "== Slowest statements in the benchmark"
+echo "== Slowest statements in the benchmark, and the plan of the slowest SQL"
 sql /tmp "sys/$SYS_PASSWORD@$DB as sysdba" <<SQL
 set linesize 250 pagesize 100 long 100000
 column sql_text format a120 word_wrapped
@@ -88,6 +88,7 @@ column plan_table_output format a200
 select t.plan_table_output
   from (select sql_id, child_number from v\$sql
          where parsing_schema_name = upper('$APP_USER')
+           and command_type <> 47 -- PL/SQL blocks have no plan
          order by elapsed_time desc fetch first 1 row only) s,
        table(dbms_xplan.display_cursor(s.sql_id, s.child_number, 'TYPICAL')) t;
 exit
