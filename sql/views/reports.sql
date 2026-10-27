@@ -70,7 +70,8 @@ select 'FAILED', fail_reason, count(*), cast(min(rated_at) as timestamp), cast(m
  where status = 'FAILED'
  group by fail_reason;
 
--- How far through its allowances each line is in each open cycle.
+-- How far through its allowances each line is in each open cycle, on
+-- its current plan.
 create or replace view allowance_left as
 select u.subscriber_id, s.msisdn, u.cycle_id, u.service, a.units as allowance, u.used_units,
        greatest(a.units - u.used_units, 0) as left_units,
@@ -78,8 +79,5 @@ select u.subscriber_id, s.msisdn, u.cycle_id, u.service, a.units as allowance, u
   from allowance_usage u
   join bill_cycles c on c.cycle_id = u.cycle_id and c.status = 'OPEN'
   join subscribers s on s.subscriber_id = u.subscriber_id
-  join subscriber_plans sp on sp.subscriber_id = u.subscriber_id
-                          and sp.valid_from < c.period_end
-                          and (sp.valid_to is null or sp.valid_to > c.period_start)
-                          and sp.valid_to is null
+  join subscriber_plans sp on sp.subscriber_id = u.subscriber_id and sp.valid_to is null
   join allowances a on a.plan_id = sp.plan_id and a.service = u.service;
