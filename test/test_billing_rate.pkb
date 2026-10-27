@@ -183,9 +183,10 @@ create or replace package body test_billing_rate as
     l_mine    cdrs.cdr_id%type := test_fixture.add_cdr('SMS', '447700900123', ts('2031-01-06 10:00:00'), 1);
     l_theirs  cdrs.cdr_id%type;
     l_status  cdrs.status%type;
+    l_at      date := ts('2031-01-06 10:00:00');
   begin
     insert into cdrs (subscriber_id, service, called, started_at, quantity)
-    values (l_other, 'SMS', '447700900123', ts('2031-01-06 10:00:00'), 1)
+    values (l_other, 'SMS', '447700900123', l_at, 1)
     returning cdr_id into l_theirs;
     billing_rate.rate_chunk(test_fixture.g_subscriber, test_fixture.g_subscriber);
     ut.expect(test_fixture.cdr(l_mine).status).to_equal('RATED');
