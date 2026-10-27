@@ -59,9 +59,17 @@ create or replace package body billing_run as
              where cycle_id = p_cycle_id) b on b.customer_id = cu.customer_id;
     l_invoices := sql%rowcount;
 
+    -- The lines don't join invoices: a join let the optimizer drive from
+    -- invoices and push the join into each branch, which is fine while
+    -- invoices is small and ruinous when a plan made then is reused for
+    -- thousands (every invoice rescanned the cycle's calls). There's one
+    -- invoice per customer per cycle, so lines are numbered by customer,
+    -- and each customer's invoice is a unique index lookup, which scalar
+    -- subquery caching does once per customer.
     insert into invoice_lines (invoice_id, line_no, kind, subscriber_id, description, quantity, amount)
-    select i.invoice_id,
-           row_number() over (partition by i.invoice_id order by l.sort_order, l.subscriber_id, l.description),
+    select (select i.invoice_id from invoices i
+             where i.customer_id = l.customer_id and i.cycle_id = p_cycle_id),
+           row_number() over (partition by l.customer_id order by l.sort_order, l.subscriber_id, l.description),
            l.kind, l.subscriber_id, l.description, l.quantity, l.amount
       from (
             -- Each stretch of days on a plan, clipped to the cycle.
@@ -95,8 +103,7 @@ create or replace package body billing_run as
             select customer_id, 3, 'ADJUSTMENT', null, reason, null, amount
               from adjustments
              where cycle_id = p_cycle_id
-           ) l
-      join invoices i on i.customer_id = l.customer_id and i.cycle_id = p_cycle_id;
+           ) l;
 
     merge into invoices i
     using (select inv.invoice_id,
