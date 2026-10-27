@@ -31,12 +31,13 @@ create or replace package billing_errors as
   e_bad_file exception;
   pragma exception_init(e_bad_file, -20009);
 
-  -- ORA-00054, what select for update nowait raises on a locked row.
-  e_row_locked exception;
-  pragma exception_init(e_row_locked, -54);
-
   -- Takes the lock for a process (a row of billing_locks) until the
   -- transaction ends, or raises busy if another session holds it.
   procedure take_lock(p_name varchar2);
+
+  -- The same lock, held across commits until release_lock or the end of
+  -- the session: for work that commits as it goes.
+  procedure hold_lock(p_name varchar2);
+  procedure release_lock(p_name varchar2);
 end billing_errors;
 /
