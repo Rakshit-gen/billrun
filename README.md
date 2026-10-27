@@ -3,14 +3,22 @@
 A telecom billing engine in Oracle PL/SQL. It loads call records from
 switch files, rates them against tariff plans with allowances, peak hours
 and holidays, and bills each month with prorated plan fees, adjustments
-and tax. It runs on Oracle 19c and later; CI tests it on Oracle Database
-23ai Free with utPLSQL.
+and tax. Then it runs receivables: payments allocated oldest invoice
+first, dunning up to suspension, and an aging report. Invoices, payments
+and allowance alerts go out as events on an Advanced Queuing queue, and
+resellers see only their own customers through Virtual Private Database.
+It runs on Oracle 19c and later; CI tests it on Oracle Database 23ai Free
+with utPLSQL, with line coverage, compiler warnings and a benchmark in
+every run.
+
+`docs/design.md` has the data model and why it's built the way it is.
 
 ## How it works
 
 ```
 CSV from a switch
-   |  billing_load.stage_csv     one row per line, all text
+   |  billing_load.stage_file    a file in a directory, read as an
+   |  billing_load.stage_csv     external table; or the text itself
    v
 cdr_staging (NEW)
    |  billing_load.load_staged   check every field, find the subscriber
@@ -22,10 +30,18 @@ cdrs (RATED or FAILED, with the reason)
    |  billing_run.bill_cycle     fees, usage, adjustments, tax
    v
 invoices + invoice_lines         frozen once the cycle is BILLED
+   |  billing_ar.record_payment  allocated oldest first
+   |  billing_ar.run_dunning     reminder, warning, suspension
+   v
+payments, allocations, dunning_actions
+
+every step above  ------------>  billing_events queue (INVOICE_ISSUED,
+                                 PAYMENT_RECEIVED, DUNNING_*, ALLOWANCE_*)
 ```
 
-`billing_jobs` runs the first three steps every 15 minutes and the bill
-run at 02:00 on the 1st, through DBMS_SCHEDULER.
+`billing_jobs` runs the first three steps every 15 minutes, the bill run
+at 02:00 on the 1st and dunning at 06:00 every day, through
+DBMS_SCHEDULER.
 
 ## The billing rules
 
@@ -57,6 +73,16 @@ run at 02:00 on the 1st, through DBMS_SCHEDULER.
   always adds up to what's printed on it. A billed cycle's invoices and
   adjustments can't be changed; a correction is an adjustment on the next
   cycle.
+- **Payment terms.** An invoice is issued the day the month ends (or the
+  day it's billed, if later) and due `terms_days` after, 14 by default.
+- **Payments** go to the customer's oldest open invoices first. What's
+  left stays on account and pays the next invoice when it's issued. A
+  payment carries the bank's reference, so the same payment sent twice is
+  recorded once, and a different payment with a reference already used
+  is refused.
+- **Dunning.** 7 days overdue gets a reminder, 30 a warning, and 60
+  suspends the customer. Each step is taken once per invoice. A payment
+  that clears everything overdue makes the customer active again.
 - **Nothing is dropped.** A row that can't be loaded stays in staging as
   REJECTED with the reason; a record that can't be rated stays in `cdrs`
   as FAILED with the reason, and can be set back to NEW once the
@@ -85,15 +111,50 @@ run at 02:00 on the 1st, through DBMS_SCHEDULER.
   with one `FORALL UPDATE`, and keeps allowance counters in memory,
   flushing them with a `FORALL MERGE` per batch. A test rates the same
   generated month both ways and checks every field matches.
+- **Parallel rating.** `rate_parallel` splits the subscribers with
+  waiting records into chunks (`ntile` over their ids) and rates them in
+  scheduler jobs with DBMS_PARALLEL_EXECUTE. A chunk owns whole
+  subscribers, so no two sessions count the same allowance. A chunk that
+  fails is retried once; if it fails again the call raises the chunk's
+  error, and the chunks that finished stay rated.
+- **External tables.** `stage_file` reads a switch file from a database
+  directory with an inline external table (`EXTERNAL (...)` in the
+  `FROM` clause, new in 18c), so there's no table to create per file.
+  Oracle won't take binds there, so the file name is checked against a
+  plain name pattern and quoted with `DBMS_ASSERT`.
 - **Set based billing.** `bill_cycle` does its work in four statements: an insert of
   the invoices with gapless numbers from `row_number()`, an insert of all
   the lines (prorating with `CROSS APPLY`), a `MERGE` of the totals, and
   the cycle update. It doesn't commit, so it all goes in or none of it.
-- **Locks.** Each process takes its row in `billing_locks` with `SELECT
-  ... FOR UPDATE NOWAIT`, so a second copy of the rater fails at once
-  with `-20005` instead of counting allowances twice.
+- **Set based allocation.** `billing_ar.allocate` is one `MERGE`: money on
+  account and open invoices are laid end to end as running totals with
+  `SUM() OVER`, and each overlap between the two is an allocation.
+- **Pipelined functions.** `billing_ar.aging` returns the aging buckets
+  per customer as rows (`select * from billing_ar.aging(date '...')`),
+  and `billing_maint.partitions` lists the call record partitions with
+  their months.
+- **JSON.** `billing_export.invoice_json` builds an invoice with its lines
+  using `JSON_OBJECT` and `JSON_ARRAYAGG`, for a portal or an ORDS
+  endpoint.
+- **Advanced Queuing.** Events are enqueued with `visibility =>
+  on_commit`, so a consumer sees an invoice event only if the bill run
+  committed, and none if it rolled back.
+- **Virtual Private Database.** Once a session calls
+  `billing_security.set_reseller`, a policy on the customer facing tables
+  adds the reseller to every query and checks every insert and update.
+  The reseller lives in an application context only the package can set.
+- **Partition maintenance.** `billing_maint.compress_month` compresses an
+  old month online; `purge_before` drops whole months, but never one
+  with records still to rate or in an open cycle.
+- **Locks.** Each process takes a DBMS_LOCK user lock, so a second copy
+  of the rater fails at once with `-20005` instead of counting
+  allowances twice. The parallel rater holds its lock for the session,
+  across its commits.
+- **Instrumentation.** The loader and the batch rater report progress through
+  DBMS_APPLICATION_INFO, so `v$session` shows what a run is doing and
+  how far it has got.
 - **Errors** are named constants and exceptions in `billing_errors`
-  (`-20001` to `-20007`). `billing_log` writes in an autonomous
+  (`-20001` to `-20010`). `billing_log` writes in an autonomous
   transaction, so the log line about a failure survives the rollback of
   the work, with `format_error_backtrace`.
 - **Triggers** keep billed cycles frozen: no update or delete of their
@@ -102,14 +163,15 @@ run at 02:00 on the 1st, through DBMS_SCHEDULER.
   (`lag` for the change on last month), `top_usage` (`rank` within a
   cycle), `usage_by_destination` (`ratio_to_report`), `usage_by_hour`
   (running totals), `problems` and `allowance_left`.
-- **Jobs.** `billing_jobs.create_jobs` sets up the two DBMS_SCHEDULER
+- **Jobs.** `billing_jobs.create_jobs` sets up the three DBMS_SCHEDULER
   jobs. The job procedures are the only code that commits: a batch at a
   time, so a crash loses one batch.
 
 ## Running it
 
-Any Oracle 19c or later schema with CREATE TABLE, VIEW, PROCEDURE,
-TRIGGER and JOB, and quota on its tablespace:
+A schema on Oracle 19c or later with the privileges listed at the top of
+`install.sql`, and quota on its tablespace. `stage_file` also needs a
+directory object and UTL_FILE for the tests that use it.
 
 ```
 sqlplus billrun/password@//host/service @install.sql
@@ -142,9 +204,24 @@ installs utPLSQL and billrun, runs the tests and the benchmark: the same
 ## Tests
 
 utPLSQL suites in `test/`, one per package, each test in a transaction
-that's rolled back. The fixture builds two plans with round prices, so
+that's rolled back. The few that have to commit (the jobs, event
+delivery, partition maintenance) clean up after themselves. The fixture builds two plans with round prices, so
 expected amounts can be worked out by hand: a plan change on the 11th of
 January charges 10/31 of one fee and 21/31 of the other.
+
+## Editions
+
+Partitioning, compression and VPD need Enterprise Edition on 19c, and
+partitioning is a paid option there. Oracle Database Free, which CI uses,
+has all three. On Standard Edition 2 `cdrs` would have to be a plain
+table and `sql/security/vpd.sql` left out.
+
+## Not done on purpose
+
+- No materialized view over the call records: a fast refresh needs a log
+  on `cdrs`, and every rating update would write to it.
+- No migration framework. `install.sql` builds the current schema.
+- No ORDS module, though the JSON functions are what one would call.
 
 ## Limits
 
