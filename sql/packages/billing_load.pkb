@@ -85,11 +85,11 @@ create or replace package body billing_load as
     end if;
 
     -- Serial, so rownum follows the file's line order. A line has to be
-    -- trimmed of CR here, as stage_csv does, before it's split.
-    -- cursor_sharing_exact, because under cursor_sharing = FORCE the
-    -- database would turn these literals back into binds.
+    -- trimmed of CR here, as stage_csv does, before it's split. The
+    -- position is written 1-4000, not 1:4000, which SQL would read as a
+    -- bind called :4000.
     execute immediate q'[
-      insert /*+ cursor_sharing_exact */ into cdr_staging (file_name, line_no, fields, msisdn, service, called, started_at, quantity)
+      insert into cdr_staging (file_name, line_no, fields, msisdn, service, called, started_at, quantity)
       select ]' || dbms_assert.enquote_literal(p_file_name) || q'[, line_no, regexp_count(line, ',') + 1,
              substr(trim(regexp_substr(line, '([^,]*)(,|$)', 1, 1, null, 1)), 1, 100),
              substr(trim(regexp_substr(line, '([^,]*)(,|$)', 1, 2, null, 1)), 1, 100),
@@ -104,7 +104,7 @@ create or replace package body billing_load as
                          records delimited by newline
                          nobadfile nologfile nodiscardfile
                          fields notrim missing field values are null
-                         (line position(1:4000) char(4000)))
+                         (line position(1-4000) char(4000)))
                        location (]' || dbms_assert.enquote_literal(p_file_name) || q'[)
                        reject limit unlimited) f)
        where trim(line) is not null
