@@ -45,6 +45,8 @@ sql /tmp "sys/$SYS_PASSWORD@$DB as sysdba" <<SQL
 whenever sqlerror exit failure
 grant create session, create table, create view, create sequence, create procedure,
       create trigger, create type, create job to $APP_USER;
+grant execute on dbms_aq to $APP_USER;
+grant execute on dbms_aqadm to $APP_USER;
 alter user $APP_USER quota unlimited on users;
 exit
 SQL

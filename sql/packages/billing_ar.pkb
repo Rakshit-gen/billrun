@@ -36,8 +36,9 @@ create or replace package body billing_ar as
   ) return payments.payment_id%type
   is
     l_id    payments.payment_id%type;
-    l_seen  payments%rowtype;
-    l_n     pls_integer;
+    l_seen     payments%rowtype;
+    l_n        pls_integer;
+    l_payload  varchar2(4000);
   begin
     lock_customer(p_customer_id);
     begin
@@ -54,9 +55,10 @@ create or replace package body billing_ar as
           'payment ' || p_reference || ' was already taken for customer ' || l_seen.customer_id
           || ', amount ' || to_char(l_seen.amount, 'FM999999990.00'));
     end;
-    billing_events.publish('PAYMENT_RECEIVED', p_customer_id, null, null,
-      '{"paymentId":' || l_id || ',"amount":' || to_char(p_amount, 'TM9', 'NLS_NUMERIC_CHARACTERS=.,')
-      || ',"reference":"' || replace(replace(p_reference, '\', '\\'), '"', '\"') || '"}');
+    select json_object('paymentId' value l_id, 'amount' value p_amount, 'reference' value p_reference)
+      into l_payload
+      from dual;
+    billing_events.publish('PAYMENT_RECEIVED', p_customer_id, null, null, l_payload);
     l_n := allocate(p_customer_id);
     reactivate(p_customer_id, p_received_on);
     return l_id;
@@ -160,12 +162,12 @@ create or replace package body billing_ar as
     l_steps := l_new.count;
 
     for i in 1 .. l_new.count loop
-      select i.customer_id,
-             json_object('invoiceNo' value i.invoice_no, 'daysOverdue' value l_new(i).days_overdue,
+      select inv.customer_id,
+             json_object('invoiceNo' value inv.invoice_no, 'daysOverdue' value l_new(i).days_overdue,
                          'open' value l_new(i).open_amount)
         into l_customer, l_payload
-        from invoices i
-       where i.invoice_id = l_new(i).invoice_id;
+        from invoices inv
+       where inv.invoice_id = l_new(i).invoice_id;
       billing_events.publish('DUNNING_' || l_new(i).action, l_customer, null, null, l_payload);
     end loop;
 
