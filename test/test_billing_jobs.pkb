@@ -5,7 +5,7 @@ create or replace package body test_billing_jobs as
   begin
     select count(*) into l_n
       from user_scheduler_jobs
-     where job_name in (billing_jobs.usage_job, billing_jobs.bill_job);
+     where job_name in (billing_jobs.usage_job, billing_jobs.bill_job, billing_jobs.dun_job);
     return l_n;
   end job_count;
 
@@ -14,7 +14,7 @@ create or replace package body test_billing_jobs as
   begin
     billing_jobs.drop_jobs;
     billing_jobs.create_jobs;
-    ut.expect(job_count).to_equal(2);
+    ut.expect(job_count).to_equal(3);
     select job_action into l_action from user_scheduler_jobs where job_name = billing_jobs.bill_job;
     ut.expect(l_action).to_equal('BILLING_JOBS.BILL_LAST_MONTH');
     billing_jobs.drop_jobs;

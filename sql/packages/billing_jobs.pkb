@@ -39,12 +39,26 @@ create or replace package body billing_jobs as
     l_cycle := billing_admin.open_cycle(add_months(l_this_month, -1));
     l_invoices := billing_run.bill_cycle(l_cycle);
     commit;
+    l_invoices := billing_ar.allocate_all;
+    commit;
   exception
     when others then
       rollback;
       billing_log.error('bill_last_month', 'billing ' || to_char(add_months(l_this_month, -1), 'YYYY-MM') || ' stopped');
       raise;
   end bill_last_month;
+
+  procedure chase_overdue is
+    l_steps pls_integer;
+  begin
+    l_steps := billing_ar.run_dunning(sysdate);
+    commit;
+  exception
+    when others then
+      rollback;
+      billing_log.error('chase_overdue', 'dunning stopped');
+      raise;
+  end chase_overdue;
 
   procedure create_jobs is
   begin
@@ -62,6 +76,13 @@ create or replace package body billing_jobs as
       repeat_interval => 'FREQ=MONTHLY;BYMONTHDAY=1;BYHOUR=2;BYMINUTE=0;BYSECOND=0',
       enabled         => true,
       comments        => 'Bill last month');
+    dbms_scheduler.create_job(
+      job_name        => dun_job,
+      job_type        => 'STORED_PROCEDURE',
+      job_action      => 'BILLING_JOBS.CHASE_OVERDUE',
+      repeat_interval => 'FREQ=DAILY;BYHOUR=6;BYMINUTE=0;BYSECOND=0',
+      enabled         => true,
+      comments        => 'Remind, warn and suspend customers with overdue invoices');
   end create_jobs;
 
   procedure drop_jobs is
@@ -79,6 +100,7 @@ create or replace package body billing_jobs as
   begin
     drop_one(usage_job);
     drop_one(bill_job);
+    drop_one(dun_job);
   end drop_jobs;
 
 end billing_jobs;
