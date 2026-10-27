@@ -33,12 +33,16 @@ create or replace package body billing_run as
     l_days := l_cycle.period_end - l_cycle.period_start;
 
     -- Invoice numbers count up from 1 in customer order, all in this
-    -- one statement, so there are no gaps.
-    insert into invoices (invoice_no, customer_id, cycle_id)
+    -- one statement, so there are no gaps. An invoice is dated the day
+    -- after the cycle ends, or today if the run is later than that.
+    insert into invoices (invoice_no, customer_id, cycle_id, issued_at, due_date)
     select 'INV-' || to_char(l_cycle.period_start, 'YYYYMM') || '-'
-           || to_char(row_number() over (order by customer_id), 'FM000000'),
-           customer_id, p_cycle_id
-      from (select s.customer_id
+           || to_char(row_number() over (order by b.customer_id), 'FM000000'),
+           b.customer_id, p_cycle_id,
+           greatest(trunc(sysdate), l_cycle.period_end),
+           greatest(trunc(sysdate), l_cycle.period_end) + cu.terms_days
+      from customers cu
+      join (select s.customer_id
               from subscriber_plans sp
               join subscribers s on s.subscriber_id = sp.subscriber_id
              where sp.valid_from < l_cycle.period_end
@@ -52,7 +56,7 @@ create or replace package body billing_run as
             union
             select customer_id
               from adjustments
-             where cycle_id = p_cycle_id);
+             where cycle_id = p_cycle_id) b on b.customer_id = cu.customer_id;
     l_invoices := sql%rowcount;
 
     insert into invoice_lines (invoice_id, line_no, kind, subscriber_id, description, quantity, amount)

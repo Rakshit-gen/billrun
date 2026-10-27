@@ -8,6 +8,13 @@ create table customers (
   name         varchar2(200) not null,
   tax_rate     number(5,4) default 0.18 not null
                constraint customers_tax_ck check (tax_rate between 0 and 1),
+  -- Days from the invoice to its due date.
+  terms_days   number(3) default 14 not null
+               constraint customers_terms_ck check (terms_days between 0 and 120),
+  -- SUSPENDED by dunning once an invoice is long overdue, ACTIVE again
+  -- when nothing is overdue.
+  status       varchar2(9) default 'ACTIVE' not null
+               constraint customers_status_ck check (status in ('ACTIVE', 'SUSPENDED')),
   created_at   timestamp default systimestamp not null
 );
 

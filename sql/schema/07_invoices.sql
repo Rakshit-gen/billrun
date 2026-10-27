@@ -10,9 +10,11 @@ create table invoices (
   subtotal     number(12,2) default 0 not null,
   tax          number(12,2) default 0 not null,
   total        number(12,2) default 0 not null,
-  issued_at    date default sysdate not null,
+  issued_at    date default trunc(sysdate) not null,
+  due_date     date not null,
   constraint invoices_customer_cycle_uk unique (customer_id, cycle_id),
-  constraint invoices_total_ck check (total = subtotal + tax)
+  constraint invoices_total_ck check (total = subtotal + tax),
+  constraint invoices_due_ck check (due_date >= issued_at)
 );
 
 create index invoices_cycle_ix on invoices (cycle_id);
