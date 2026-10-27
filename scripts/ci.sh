@@ -20,12 +20,12 @@ cd "$(dirname "$0")/.."
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-# Runs sqlplus in the container, in directory $1, as $2, on the rest.
-# The trailing exit ends scripts that don't end themselves.
+# Runs sqlplus in the container, in directory $1, as $2, on the rest,
+# reading stdin. Scripts get </dev/null so sqlplus exits when they end.
 sql() {
   local dir=$1 login=$2
   shift 2
-  echo exit | "$RUNTIME" exec -i -w "$dir" "$CONTAINER" sqlplus -s -L "$login" "$@"
+  "$RUNTIME" exec -i -w "$dir" "$CONTAINER" sqlplus -s -L "$login" "$@"
 }
 
 echo "== Copying files into the container"
@@ -38,7 +38,7 @@ tar -xzf "$work/utPLSQL.tar.gz" -C "$work"
 "$RUNTIME" cp . "$CONTAINER:/tmp/billrun"
 
 echo "== Installing utPLSQL $UTPLSQL_VERSION"
-sql /tmp/utPLSQL/source "sys/$SYS_PASSWORD@$DB as sysdba" @install_headless.sql UT3 "$SYS_PASSWORD" users
+sql /tmp/utPLSQL/source "sys/$SYS_PASSWORD@$DB as sysdba" @install_headless.sql UT3 "$SYS_PASSWORD" users </dev/null
 
 echo "== Granting $APP_USER what billrun needs"
 sql /tmp "sys/$SYS_PASSWORD@$DB as sysdba" <<SQL
@@ -52,12 +52,12 @@ SQL
 app="$APP_USER/$APP_PASSWORD@$DB"
 
 echo "== Installing billrun, removing it, and installing it again"
-sql /tmp/billrun "$app" @install.sql
-sql /tmp/billrun "$app" @uninstall.sql
-sql /tmp/billrun "$app" @install.sql
+sql /tmp/billrun "$app" @install.sql </dev/null
+sql /tmp/billrun "$app" @uninstall.sql </dev/null
+sql /tmp/billrun "$app" @install.sql </dev/null
 
 echo "== Installing the tests"
-sql /tmp/billrun/test "$app" @install.sql
+sql /tmp/billrun/test "$app" @install.sql </dev/null
 
 echo "== Running the tests"
 sql /tmp/billrun "$app" <<SQL | tee "$work/tests.txt"
@@ -72,4 +72,4 @@ if ! grep -Eq '^[1-9][0-9]* tests, 0 failed, 0 errored' "$work/tests.txt"; then
 fi
 
 echo "== Benchmark"
-sql /tmp/billrun "$app" @bench/bench.sql
+sql /tmp/billrun "$app" @bench/bench.sql </dev/null
