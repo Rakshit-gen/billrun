@@ -67,9 +67,8 @@ run at 02:00 on the 1st, through DBMS_SCHEDULER.
 - **Interval partitioning.** `cdrs` gets a partition a month as calls
   arrive. Every index on it is local, including the primary key
   `(cdr_id, started_at)` and the duplicate check, so a month can be
-  compressed or dropped without rebuilding anything. The bill run and
-  the rater filter on `started_at` so they only touch the month they
-  need.
+  compressed or dropped without rebuilding anything. The bill run
+  filters on `started_at`, so it only reads the cycle's month.
 - **Bulk loading.** `load_staged` reads staging with `BULK COLLECT ...
   LIMIT`, checks each row in PL/SQL so a rejection names the field and
   the value, then inserts the whole batch with one `FORALL ... SAVE
@@ -86,7 +85,7 @@ run at 02:00 on the 1st, through DBMS_SCHEDULER.
   with one `FORALL UPDATE`, and keeps allowance counters in memory,
   flushing them with a `FORALL MERGE` per batch. A test rates the same
   generated month both ways and checks every field matches.
-- **Set based billing.** `bill_cycle` is four statements: an insert of
+- **Set based billing.** `bill_cycle` does its work in four statements: an insert of
   the invoices with gapless numbers from `row_number()`, an insert of all
   the lines (prorating with `CROSS APPLY`), a `MERGE` of the totals, and
   the cycle update. It doesn't commit, so it all goes in or none of it.
