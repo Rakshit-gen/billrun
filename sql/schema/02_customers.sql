@@ -3,8 +3,18 @@
 -- unique only over time, and call records are matched on the number and
 -- the time of the call.
 
+-- Resellers (MVNOs) sell lines under their own brand on this network.
+-- Their staff see only their own customers: see sql/security/vpd.sql.
+create table resellers (
+  reseller_id  number generated always as identity primary key,
+  code         varchar2(20) not null constraint resellers_code_uk unique,
+  name         varchar2(200) not null
+);
+
 create table customers (
   customer_id  number generated always as identity primary key,
+  -- Null for the operator's own customers.
+  reseller_id  number constraint customers_reseller_fk references resellers,
   name         varchar2(200) not null,
   tax_rate     number(5,4) default 0.18 not null
                constraint customers_tax_ck check (tax_rate between 0 and 1),
@@ -29,6 +39,7 @@ create table subscribers (
   constraint subscribers_range_ck check (active_to is null or active_to > active_from)
 );
 
+create index customers_reseller_ix on customers (reseller_id);
 create index subscribers_customer_ix on subscribers (customer_id);
 create index subscribers_msisdn_ix on subscribers (msisdn, active_from);
 

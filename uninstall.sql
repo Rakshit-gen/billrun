@@ -19,9 +19,12 @@ begin
                and object_name in ('CYCLE_REVENUE', 'TOP_USAGE', 'USAGE_BY_DESTINATION', 'USAGE_BY_HOUR',
                                    'PROBLEMS', 'ALLOWANCE_LEFT', 'BILLING_ERRORS', 'BILLING_LOG', 'BILLING_EVENTS',
                                    'BILLING_REF', 'BILLING_ADMIN', 'BILLING_LOAD', 'BILLING_RATE',
-                                   'BILLING_RUN', 'BILLING_AR', 'BILLING_EXPORT', 'BILLING_JOBS', 'BILLING_DEMO', 'INVOICES_FROZEN',
+                                   'BILLING_RUN', 'BILLING_AR', 'BILLING_EXPORT', 'BILLING_SECURITY', 'BILLING_JOBS', 'BILLING_DEMO', 'INVOICES_FROZEN',
                                    'INVOICE_LINES_FROZEN', 'ADJUSTMENTS_OPEN_CYCLE')) loop
     execute immediate 'drop ' || o.object_type || ' ' || o.object_name;
+  end loop;
+  for p in (select object_name, policy_name from user_policies where policy_name = 'RESELLER_SCOPE') loop
+    dbms_rls.drop_policy(user, p.object_name, p.policy_name);
   end loop;
   for q in (select queue_table from user_queue_tables where queue_table = 'BILLING_EVENTS_QT') loop
     dbms_aqadm.drop_queue_table(queue_table => q.queue_table, force => true);
@@ -30,7 +33,7 @@ begin
   for t in (select column_value as name
               from table(sys.odcivarchar2list(
                 'USAGE_ALERTS', 'DUNNING_ACTIONS', 'PAYMENT_ALLOCATIONS', 'PAYMENTS', 'INVOICE_LINES', 'INVOICES', 'ALLOWANCE_USAGE', 'CDRS', 'CDR_STAGING', 'ADJUSTMENTS',
-                'BILL_CYCLES', 'ALLOWANCES', 'TARIFFS', 'SUBSCRIBER_PLANS', 'SUBSCRIBERS', 'CUSTOMERS',
+                'BILL_CYCLES', 'ALLOWANCES', 'TARIFFS', 'SUBSCRIBER_PLANS', 'SUBSCRIBERS', 'CUSTOMERS', 'RESELLERS',
                 'DESTINATIONS', 'HOLIDAYS', 'DEST_CLASSES', 'PLANS', 'RUN_LOG', 'BILLING_LOCKS'))) loop
     for x in (select table_name from user_tables where table_name = t.name) loop
       execute immediate 'drop table ' || x.table_name || ' purge';
@@ -42,6 +45,16 @@ begin
              order by case type_name when 'AR_AGING_TAB' then 1 else 2 end) loop
     execute immediate 'drop type ' || t.type_name;
   end loop;
+end;
+/
+begin
+  execute immediate 'drop context billrun_ctx';
+exception
+  when others then
+    -- ORA-04043, it's not there.
+    if sqlcode <> -4043 then
+      raise;
+    end if;
 end;
 /
 prompt billrun is uninstalled

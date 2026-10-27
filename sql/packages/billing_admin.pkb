@@ -10,15 +10,27 @@ create or replace package body billing_admin as
       raise_application_error(billing_errors.no_such_plan, 'no plan ' || p_code);
   end plan_id;
 
-  function add_customer(p_name varchar2, p_tax_rate number default 0.18)
+  function add_customer(p_name varchar2, p_tax_rate number default 0.18, p_reseller_code varchar2 default null)
     return customers.customer_id%type
   is
-    l_id customers.customer_id%type;
+    l_reseller  resellers.reseller_id%type;
+    l_id        customers.customer_id%type;
   begin
-    insert into customers (name, tax_rate) values (p_name, p_tax_rate)
+    if p_reseller_code is not null then
+      select reseller_id into l_reseller from resellers where code = p_reseller_code;
+    end if;
+    insert into customers (name, tax_rate, reseller_id) values (p_name, p_tax_rate, l_reseller)
     returning customer_id into l_id;
     return l_id;
   end add_customer;
+
+  function add_reseller(p_code varchar2, p_name varchar2) return resellers.reseller_id%type is
+    l_id resellers.reseller_id%type;
+  begin
+    insert into resellers (code, name) values (p_code, p_name)
+    returning reseller_id into l_id;
+    return l_id;
+  end add_reseller;
 
   function add_subscriber(
     p_customer_id  customers.customer_id%type,

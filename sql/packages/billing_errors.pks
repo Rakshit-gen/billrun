@@ -11,6 +11,7 @@ create or replace package billing_errors as
   bad_date         constant pls_integer := -20007;
   payment_clash    constant pls_integer := -20008;
   bad_file         constant pls_integer := -20009;
+  no_such_reseller constant pls_integer := -20010;
 
   e_cycle_not_open exception;
   pragma exception_init(e_cycle_not_open, -20001);
@@ -30,6 +31,8 @@ create or replace package billing_errors as
   pragma exception_init(e_payment_clash, -20008);
   e_bad_file exception;
   pragma exception_init(e_bad_file, -20009);
+  e_no_such_reseller exception;
+  pragma exception_init(e_no_such_reseller, -20010);
 
   -- Takes the lock for a process (a row of billing_locks) until the
   -- transaction ends, or raises busy if another session holds it.

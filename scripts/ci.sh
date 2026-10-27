@@ -53,6 +53,8 @@ grant execute on dbms_aqadm to $APP_USER;
 grant execute on utl_file to $APP_USER;
 grant execute on dbms_lock to $APP_USER;
 grant execute on dbms_parallel_execute to $APP_USER;
+grant execute on dbms_rls to $APP_USER;
+grant create any context, drop any context to $APP_USER;
 create or replace directory billrun_in as '/opt/oracle/billrun_in';
 grant read, write on directory billrun_in to $APP_USER;
 alter user $APP_USER quota unlimited on users;

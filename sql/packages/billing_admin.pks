@@ -4,8 +4,10 @@ create or replace package billing_admin as
 
   function plan_id(p_code plans.code%type) return plans.plan_id%type;
 
-  function add_customer(p_name varchar2, p_tax_rate number default 0.18)
+  function add_customer(p_name varchar2, p_tax_rate number default 0.18, p_reseller_code varchar2 default null)
     return customers.customer_id%type;
+
+  function add_reseller(p_code varchar2, p_name varchar2) return resellers.reseller_id%type;
 
   -- Gives p_msisdn to a new subscriber on plan p_plan_code from the day
   -- p_from. Raises number_in_use if the number is anyone's on that day

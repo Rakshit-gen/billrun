@@ -1,8 +1,8 @@
 -- Installs billrun into the current schema:
 --   sqlplus billrun/password@//localhost/FREEPDB1 @install.sql
 -- The schema needs CREATE TABLE, VIEW, PROCEDURE, TRIGGER, TYPE and JOB,
--- EXECUTE on DBMS_AQ, DBMS_AQADM, DBMS_LOCK and DBMS_PARALLEL_EXECUTE,
--- and quota on its tablespace.
+-- CREATE ANY CONTEXT, EXECUTE on DBMS_AQ, DBMS_AQADM, DBMS_LOCK,
+-- DBMS_PARALLEL_EXECUTE and DBMS_RLS, and quota on its tablespace.
 
 whenever sqlerror exit failure rollback
 set define off
@@ -36,6 +36,7 @@ prompt Compiling packages
 @@sql/packages/billing_run.pks
 @@sql/packages/billing_ar.pks
 @@sql/packages/billing_export.pks
+@@sql/packages/billing_security.pks
 @@sql/packages/billing_jobs.pks
 @@sql/packages/billing_demo.pks
 @@sql/packages/billing_errors.pkb
@@ -48,12 +49,16 @@ prompt Compiling packages
 @@sql/packages/billing_run.pkb
 @@sql/packages/billing_ar.pkb
 @@sql/packages/billing_export.pkb
+@@sql/packages/billing_security.pkb
 @@sql/packages/billing_jobs.pkb
 @@sql/packages/billing_demo.pkb
 
 prompt Creating triggers and views
 @@sql/triggers/billed_cycles.sql
 @@sql/views/reports.sql
+
+prompt Adding reseller security policies
+@@sql/security/vpd.sql
 
 prompt Loading reference data
 @@sql/data/seed.sql
