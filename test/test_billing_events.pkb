@@ -19,15 +19,17 @@ create or replace package body test_billing_events as
 
   procedure invoice_issued is
     l_n        pls_integer := billing_run.bill_cycle(test_fixture.g_jan);
-    l_payload  varchar2(4000);
+    l_no       varchar2(20);
+    l_due      varchar2(10);
   begin
     ut.expect(events('INVOICE_ISSUED')).to_equal(1);
-    select q.user_data.payload into l_payload
+    select json_value(q.user_data.payload, '$.invoiceNo'), json_value(q.user_data.payload, '$.due')
+      into l_no, l_due
       from billing_events_qt q
      where q.user_data.event_type = 'INVOICE_ISSUED'
        and q.user_data.customer_id = test_fixture.g_customer;
-    ut.expect(json_value(l_payload, '$.invoiceNo')).to_equal('INV-203101-000001');
-    ut.expect(json_value(l_payload, '$.due')).to_equal('2031-02-15');
+    ut.expect(l_no).to_equal('INV-203101-000001');
+    ut.expect(l_due).to_equal('2031-02-15');
   end invoice_issued;
 
   procedure payment_received is
