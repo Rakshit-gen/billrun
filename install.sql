@@ -1,7 +1,8 @@
 -- Installs billrun into the current schema:
 --   sqlplus billrun/password@//localhost/FREEPDB1 @install.sql
 -- The schema needs CREATE TABLE, VIEW, PROCEDURE, TRIGGER, TYPE and JOB,
--- EXECUTE on DBMS_AQ and DBMS_AQADM, and quota on its tablespace.
+-- EXECUTE on DBMS_AQ, DBMS_AQADM, DBMS_LOCK and DBMS_PARALLEL_EXECUTE,
+-- and quota on its tablespace.
 
 whenever sqlerror exit failure rollback
 set define off
