@@ -231,6 +231,18 @@ to, and takes its parameters on the command line:
 runs the three, and rolls everything back. CI runs it on every push and
 keeps the output with the coverage report.
 
+The month end report from run 40551814115:
+
+```
+Reseller             Invoices     Plan fees         Usage   Adjustments      Subtotal           Tax          Total
+-------------------- -------- ------------- ------------- ------------- ------------- ------------- --------------
+Coastline Telecom         100      5,375.00      3,559.40        -20.00      8,914.40      1,604.70      10,519.10
+Direct                    100      5,310.00      4,296.40        -20.00      9,586.40      1,725.60      11,312.00
+Northtel Mobile           100      5,605.00      3,432.05        -20.00      9,017.05      1,623.17      10,640.22
+Total                     300     16,290.00     11,287.85        -60.00     27,517.85      4,953.47      32,471.32
+Check: every invoice equals the sum of its lines plus tax.
+```
+
 ## Performance
 
 `bench/bench.sql` runs in CI on every push: a generated month of 50,000
