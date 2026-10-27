@@ -12,6 +12,7 @@ prompt Compiling tests
 @@test_billing_load.pks
 @@test_billing_rate.pks
 @@test_billing_run.pks
+@@test_billing_ar.pks
 @@test_billing_admin.pks
 @@test_billing_jobs.pks
 @@test_fixture.pkb
@@ -19,6 +20,7 @@ prompt Compiling tests
 @@test_billing_load.pkb
 @@test_billing_rate.pkb
 @@test_billing_run.pkb
+@@test_billing_ar.pkb
 @@test_billing_admin.pkb
 @@test_billing_jobs.pkb
 
