@@ -87,16 +87,22 @@ create or replace package body test_billing_rate as
   procedure plan_change is
     l_before  cdrs.cdr_id%type;
     l_after   cdrs.cdr_id%type;
-    l_plan    plans.plan_id%type;
+
+    -- The plan whose tariff a record was rated on.
+    function plan_of(p_cdr_id cdrs.cdr_id%type) return plans.plan_id%type is
+      l_tariff  tariffs.tariff_id%type := test_fixture.cdr(p_cdr_id).tariff_id;
+      l_plan    plans.plan_id%type;
+    begin
+      select plan_id into l_plan from tariffs where tariff_id = l_tariff;
+      return l_plan;
+    end plan_of;
   begin
     billing_admin.change_plan(test_fixture.g_subscriber, 'TEST2', date '2031-01-11');
     l_before := test_fixture.add_cdr('SMS', '447700900123', ts('2031-01-10 23:59:59'), 1);
     l_after := test_fixture.add_cdr('SMS', '447700900123', ts('2031-01-11 00:00:00'), 1);
     rate;
-    select plan_id into l_plan from tariffs where tariff_id = test_fixture.cdr(l_before).tariff_id;
-    ut.expect(l_plan).to_equal(billing_admin.plan_id('TEST1'));
-    select plan_id into l_plan from tariffs where tariff_id = test_fixture.cdr(l_after).tariff_id;
-    ut.expect(l_plan).to_equal(billing_admin.plan_id('TEST2'));
+    ut.expect(plan_of(l_before)).to_equal(billing_admin.plan_id('TEST1'));
+    ut.expect(plan_of(l_after)).to_equal(billing_admin.plan_id('TEST2'));
   end plan_change;
 
   procedure tariff_change is
