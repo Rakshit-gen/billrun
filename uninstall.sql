@@ -19,7 +19,7 @@ begin
                and object_name in ('CYCLE_REVENUE', 'TOP_USAGE', 'USAGE_BY_DESTINATION', 'USAGE_BY_HOUR',
                                    'PROBLEMS', 'ALLOWANCE_LEFT', 'BILLING_ERRORS', 'BILLING_LOG',
                                    'BILLING_REF', 'BILLING_ADMIN', 'BILLING_LOAD', 'BILLING_RATE',
-                                   'BILLING_RUN', 'BILLING_AR', 'BILLING_JOBS', 'BILLING_DEMO', 'INVOICES_FROZEN',
+                                   'BILLING_RUN', 'BILLING_AR', 'BILLING_EXPORT', 'BILLING_JOBS', 'BILLING_DEMO', 'INVOICES_FROZEN',
                                    'INVOICE_LINES_FROZEN', 'ADJUSTMENTS_OPEN_CYCLE')) loop
     execute immediate 'drop ' || o.object_type || ' ' || o.object_name;
   end loop;

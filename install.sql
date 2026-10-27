@@ -31,6 +31,7 @@ prompt Compiling packages
 @@sql/packages/billing_rate.pks
 @@sql/packages/billing_run.pks
 @@sql/packages/billing_ar.pks
+@@sql/packages/billing_export.pks
 @@sql/packages/billing_jobs.pks
 @@sql/packages/billing_demo.pks
 @@sql/packages/billing_errors.pkb
@@ -41,6 +42,7 @@ prompt Compiling packages
 @@sql/packages/billing_rate.pkb
 @@sql/packages/billing_run.pkb
 @@sql/packages/billing_ar.pkb
+@@sql/packages/billing_export.pkb
 @@sql/packages/billing_jobs.pkb
 @@sql/packages/billing_demo.pkb
 

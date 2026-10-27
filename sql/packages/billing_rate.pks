@@ -20,5 +20,12 @@ create or replace package billing_rate as
   -- often first written. Kept as the reference that rate_pending is
   -- tested and timed against.
   function rate_pending_slow(p_max_rows pls_integer default 100000) return pls_integer;
+
+  -- Puts an open cycle's records back to NEW, along with the month's
+  -- FAILED ones, and clears its allowance counters, so the next
+  -- rate_pending rates them all again: after a tariff was entered wrong,
+  -- say. Raises cycle_not_open for a billed cycle. Returns the records
+  -- reset.
+  function rerate_cycle(p_cycle_id bill_cycles.cycle_id%type) return pls_integer;
 end billing_rate;
 /

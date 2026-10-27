@@ -607,5 +607,33 @@ create or replace package body billing_rate as
     return l_done;
   end rate_pending_slow;
 
+  function rerate_cycle(p_cycle_id bill_cycles.cycle_id%type) return pls_integer is
+    l_cycle  bill_cycles%rowtype;
+    l_n      pls_integer;
+  begin
+    billing_errors.take_lock('RATER');
+    begin
+      select * into l_cycle from bill_cycles where cycle_id = p_cycle_id for update;
+    exception
+      when no_data_found then
+        raise_application_error(billing_errors.no_such_cycle, 'no bill cycle ' || p_cycle_id);
+    end;
+    if l_cycle.status <> 'OPEN' then
+      raise_application_error(billing_errors.cycle_not_open,
+        'cycle ' || to_char(l_cycle.period_start, 'YYYY-MM') || ' is billed; correct it with an adjustment');
+    end if;
+
+    update cdrs
+       set status = 'NEW', cycle_id = null, late = 'N', dest_class = null, peak = null, tariff_id = null,
+           rated_units = null, included_units = null, charged_units = null, amount = null,
+           fail_reason = null, rated_at = null
+     where cycle_id = p_cycle_id
+        or (status = 'FAILED' and started_at >= l_cycle.period_start and started_at < l_cycle.period_end);
+    l_n := sql%rowcount;
+    delete from allowance_usage where cycle_id = p_cycle_id;
+    billing_log.info('billing_rate', 'rerating ' || to_char(l_cycle.period_start, 'YYYY-MM') || ': ' || l_n || ' records reset');
+    return l_n;
+  end rerate_cycle;
+
 end billing_rate;
 /
