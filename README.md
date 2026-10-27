@@ -42,8 +42,8 @@ run at 02:00 on the 1st, through DBMS_SCHEDULER.
   minutes; "60/1" is a minute and then by the second. A tariff for PEAK
   or OFFPEAK wins over one for ANY, and prices have `valid_from` and
   `valid_to`, so a price change applies to calls from that day.
-- **Allowances** (600 minutes of calls, 5 GB of data) cover destinations
-  in the bundle. They're used up in call time order, whatever order the
+- **Allowances** (Plus has 300 minutes, 500 texts and 5 GB of data)
+  cover destinations in the bundle, not international or premium rate. They're used up in call time order, whatever order the
   records arrive in, and a call that runs past the end is split: part
   included, the rest charged.
 - **Plan changes** take effect from a day. Calls are rated on the plan of
