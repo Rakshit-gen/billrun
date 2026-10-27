@@ -1,31 +1,31 @@
 create or replace package body test_billing_ref as
 
-  function at(p_text varchar2) return date is
+  function ts(p_text varchar2) return date is
   begin
     return to_date(p_text, 'YYYY-MM-DD HH24:MI:SS');
-  end at;
+  end ts;
 
   procedure weekday_peak is
   begin
-    ut.expect(billing_ref.is_peak(at('2031-01-06 07:59:59'))).to_equal('N');
-    ut.expect(billing_ref.is_peak(at('2031-01-06 08:00:00'))).to_equal('Y');
-    ut.expect(billing_ref.is_peak(at('2031-01-06 19:59:59'))).to_equal('Y');
-    ut.expect(billing_ref.is_peak(at('2031-01-06 20:00:00'))).to_equal('N');
-    ut.expect(billing_ref.is_peak(at('2031-01-10 12:00:00'))).to_equal('Y');
+    ut.expect(billing_ref.is_peak(ts('2031-01-06 07:59:59'))).to_equal('N');
+    ut.expect(billing_ref.is_peak(ts('2031-01-06 08:00:00'))).to_equal('Y');
+    ut.expect(billing_ref.is_peak(ts('2031-01-06 19:59:59'))).to_equal('Y');
+    ut.expect(billing_ref.is_peak(ts('2031-01-06 20:00:00'))).to_equal('N');
+    ut.expect(billing_ref.is_peak(ts('2031-01-10 12:00:00'))).to_equal('Y');
   end weekday_peak;
 
   procedure weekend is
   begin
-    ut.expect(billing_ref.is_peak(at('2031-01-04 12:00:00'))).to_equal('N');
-    ut.expect(billing_ref.is_peak(at('2031-01-05 12:00:00'))).to_equal('N');
+    ut.expect(billing_ref.is_peak(ts('2031-01-04 12:00:00'))).to_equal('N');
+    ut.expect(billing_ref.is_peak(ts('2031-01-05 12:00:00'))).to_equal('N');
   end weekend;
 
   procedure holiday is
   begin
     insert into holidays (holiday, name) values (date '2031-01-07', 'Test holiday');
-    ut.expect(billing_ref.weekday_peak(at('2031-01-07 12:00:00'))).to_equal('Y');
-    ut.expect(billing_ref.is_peak(at('2031-01-07 12:00:00'))).to_equal('N');
-    ut.expect(billing_ref.is_peak(at('2031-01-08 12:00:00'))).to_equal('Y');
+    ut.expect(billing_ref.weekday_peak(ts('2031-01-07 12:00:00'))).to_equal('Y');
+    ut.expect(billing_ref.is_peak(ts('2031-01-07 12:00:00'))).to_equal('N');
+    ut.expect(billing_ref.is_peak(ts('2031-01-08 12:00:00'))).to_equal('Y');
   end holiday;
 
   procedure longest_prefix is
