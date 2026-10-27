@@ -9,6 +9,7 @@ create or replace package billing_errors as
   busy             constant pls_integer := -20005;
   no_such_plan     constant pls_integer := -20006;
   bad_date         constant pls_integer := -20007;
+  payment_clash    constant pls_integer := -20008;
 
   e_cycle_not_open exception;
   pragma exception_init(e_cycle_not_open, -20001);
@@ -24,6 +25,8 @@ create or replace package billing_errors as
   pragma exception_init(e_no_such_plan, -20006);
   e_bad_date exception;
   pragma exception_init(e_bad_date, -20007);
+  e_payment_clash exception;
+  pragma exception_init(e_payment_clash, -20008);
 
   -- ORA-00054, what select for update nowait raises on a locked row.
   e_row_locked exception;
