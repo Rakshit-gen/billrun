@@ -37,6 +37,7 @@ prompt Compiling packages
 @@sql/packages/billing_ar.pks
 @@sql/packages/billing_export.pks
 @@sql/packages/billing_security.pks
+@@sql/packages/billing_maint.pks
 @@sql/packages/billing_jobs.pks
 @@sql/packages/billing_demo.pks
 @@sql/packages/billing_errors.pkb
@@ -50,6 +51,7 @@ prompt Compiling packages
 @@sql/packages/billing_ar.pkb
 @@sql/packages/billing_export.pkb
 @@sql/packages/billing_security.pkb
+@@sql/packages/billing_maint.pkb
 @@sql/packages/billing_jobs.pkb
 @@sql/packages/billing_demo.pkb
 
