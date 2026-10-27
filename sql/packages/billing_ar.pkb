@@ -54,6 +54,9 @@ create or replace package body billing_ar as
           'payment ' || p_reference || ' was already taken for customer ' || l_seen.customer_id
           || ', amount ' || to_char(l_seen.amount, 'FM999999990.00'));
     end;
+    billing_events.publish('PAYMENT_RECEIVED', p_customer_id, null, null,
+      '{"paymentId":' || l_id || ',"amount":' || to_char(p_amount, 'TM9', 'NLS_NUMERIC_CHARACTERS=.,')
+      || ',"reference":"' || replace(replace(p_reference, '\', '\\'), '"', '\"') || '"}');
     l_n := allocate(p_customer_id);
     reactivate(p_customer_id, p_received_on);
     return l_id;
@@ -127,14 +130,18 @@ create or replace package body billing_ar as
   end open_amount;
 
   function run_dunning(p_as_of date) return pls_integer is
+    type t_steps is table of dunning_actions%rowtype index by pls_integer;
     l_as_of      date := trunc(p_as_of);
+    l_new        t_steps;
     l_steps      pls_integer;
     l_suspended  pls_integer;
+    l_customer   customers.customer_id%type;
+    l_payload    varchar2(4000);
   begin
     -- Every step an invoice has reached and not had yet. An invoice
     -- found 65 days overdue the first time gets all three.
-    insert into dunning_actions (invoice_id, step, action, days_overdue, open_amount, taken_on)
     select o.invoice_id, s.step, s.action, l_as_of - o.due_date, o.open_amount, l_as_of
+      bulk collect into l_new
       from (select i.invoice_id, i.due_date,
                    i.total - nvl((select sum(a.amount) from payment_allocations a
                                    where a.invoice_id = i.invoice_id), 0) as open_amount
@@ -146,8 +153,21 @@ create or replace package body billing_ar as
         on l_as_of - o.due_date >= s.days
      where o.open_amount > 0
        and not exists (select null from dunning_actions d
-                        where d.invoice_id = o.invoice_id and d.step = s.step);
-    l_steps := sql%rowcount;
+                        where d.invoice_id = o.invoice_id and d.step = s.step)
+     order by o.invoice_id, s.step;
+    forall i in 1 .. l_new.count
+      insert into dunning_actions values l_new(i);
+    l_steps := l_new.count;
+
+    for i in 1 .. l_new.count loop
+      select i.customer_id,
+             json_object('invoiceNo' value i.invoice_no, 'daysOverdue' value l_new(i).days_overdue,
+                         'open' value l_new(i).open_amount)
+        into l_customer, l_payload
+        from invoices i
+       where i.invoice_id = l_new(i).invoice_id;
+      billing_events.publish('DUNNING_' || l_new(i).action, l_customer, null, null, l_payload);
+    end loop;
 
     update customers c
        set c.status = 'SUSPENDED'

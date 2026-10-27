@@ -115,6 +115,14 @@ create or replace package body billing_run as
        set status = 'BILLED', billed_at = systimestamp
      where cycle_id = p_cycle_id;
 
+    for r in (select i.invoice_id, i.customer_id,
+                     json_object('invoiceId' value i.invoice_id, 'invoiceNo' value i.invoice_no,
+                                 'total' value i.total, 'due' value to_char(i.due_date, 'YYYY-MM-DD')) as payload
+                from invoices i
+               where i.cycle_id = p_cycle_id) loop
+      billing_events.publish('INVOICE_ISSUED', r.customer_id, null, p_cycle_id, r.payload);
+    end loop;
+
     billing_log.info('billing_run',
       'billed ' || to_char(l_cycle.period_start, 'YYYY-MM') || ': ' || l_invoices || ' invoices'
       || case when l_failed > 0 then ', ' || l_failed || ' failed call records left out' end);

@@ -17,6 +17,8 @@ create or replace package body billing_jobs as
       l_rated := l_rated + l_n;
       exit when l_n = 0;
     end loop;
+    l_n := billing_events.raise_allowance_alerts;
+    commit;
     if l_loaded + l_rated > 0 then
       billing_log.info('process_usage', l_loaded || ' staged rows processed, ' || l_rated || ' call records rated');
     end if;

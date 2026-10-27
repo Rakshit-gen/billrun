@@ -47,7 +47,9 @@ create or replace package body billing_events as
 
   function raise_allowance_alerts return pls_integer is
     type t_alerts is table of usage_alerts%rowtype index by pls_integer;
-    l_alerts t_alerts;
+    l_alerts    t_alerts;
+    l_customer  customers.customer_id%type;
+    l_payload   varchar2(4000);
   begin
     -- The allowance is the one on the line's last plan in the cycle.
     select u.subscriber_id, u.cycle_id, u.service, t.pct, u.used_units, a.units, systimestamp
@@ -74,13 +76,14 @@ create or replace package body billing_events as
       insert into usage_alerts values l_alerts(i);
 
     for i in 1 .. l_alerts.count loop
-      publish('ALLOWANCE_' || l_alerts(i).threshold_pct,
-              p_customer_id   => null,
-              p_subscriber_id => l_alerts(i).subscriber_id,
-              p_cycle_id      => l_alerts(i).cycle_id,
-              p_payload       => json_object('service' value l_alerts(i).service,
-                                             'used' value l_alerts(i).used_units,
-                                             'allowance' value l_alerts(i).allowance));
+      select s.customer_id,
+             json_object('msisdn' value s.msisdn, 'service' value l_alerts(i).service,
+                         'used' value l_alerts(i).used_units, 'allowance' value l_alerts(i).allowance)
+        into l_customer, l_payload
+        from subscribers s
+       where s.subscriber_id = l_alerts(i).subscriber_id;
+      publish('ALLOWANCE_' || l_alerts(i).threshold_pct, l_customer,
+              l_alerts(i).subscriber_id, l_alerts(i).cycle_id, l_payload);
     end loop;
     return l_alerts.count;
   end raise_allowance_alerts;
