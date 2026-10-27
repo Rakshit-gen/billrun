@@ -23,7 +23,7 @@ prompt
 -- Lines are summed per invoice first, so each invoice is counted once
 -- and its header can be compared with its lines.
 with per_invoice as (
-  select nvl(r.name, 'Direct') as reseller,
+  select nvl(r.name, 'Direct') as reseller_name,
          i.subtotal, i.tax, i.total,
          nvl(sum(case l.kind when 'RECURRING' then l.amount end), 0) as fees,
          nvl(sum(case l.kind when 'USAGE' then l.amount end), 0) as usage,
@@ -35,13 +35,13 @@ with per_invoice as (
     left join invoice_lines l on l.invoice_id = i.invoice_id
    where c.period_start = to_date('&1', 'YYYY-MM')
    group by i.invoice_id, nvl(r.name, 'Direct'), i.subtotal, i.tax, i.total)
-select case grouping(reseller) when 1 then 'Total' else reseller end as reseller,
+select case grouping(reseller_name) when 1 then 'Total' else reseller_name end as reseller,
        count(*) as invoices,
        sum(fees) as fees, sum(usage) as usage, sum(adjustments) as adjustments,
        sum(subtotal) as subtotal, sum(tax) as tax, sum(total) as total
   from per_invoice
- group by rollup (reseller)
- order by grouping(reseller), reseller;
+ group by rollup (reseller_name)
+ order by grouping(reseller_name), reseller_name;
 
 declare
   l_bad pls_integer;
