@@ -74,7 +74,11 @@ create or replace package body billing_run as
              where o.days > 0
             union all
             select s.customer_id, 2, 'USAGE', c.subscriber_id,
-                   initcap(c.service) || ', ' || dc.name || case c.late when 'Y' then ', late' end,
+                   case c.service
+                     when 'VOICE' then 'Calls to ' || dc.name
+                     when 'SMS' then 'Texts to ' || dc.name
+                     else 'Mobile data'
+                   end || case c.late when 'Y' then ', arrived late' end,
                    sum(c.rated_units),
                    round(sum(c.amount), 2)
               from cdrs c
