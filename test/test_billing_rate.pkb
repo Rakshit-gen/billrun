@@ -177,6 +177,22 @@ create or replace package body test_billing_rate as
     l_n := billing_rate.rerate_cycle(test_fixture.g_jan);
   end rerate_billed;
 
+  procedure chunk_range is
+    l_other   subscribers.subscriber_id%type :=
+                billing_admin.add_subscriber(test_fixture.g_customer, '447000999555', 'TEST1', date '2031-01-01');
+    l_mine    cdrs.cdr_id%type := test_fixture.add_cdr('SMS', '447700900123', ts('2031-01-06 10:00:00'), 1);
+    l_theirs  cdrs.cdr_id%type;
+    l_status  cdrs.status%type;
+  begin
+    insert into cdrs (subscriber_id, service, called, started_at, quantity)
+    values (l_other, 'SMS', '447700900123', ts('2031-01-06 10:00:00'), 1)
+    returning cdr_id into l_theirs;
+    billing_rate.rate_chunk(test_fixture.g_subscriber, test_fixture.g_subscriber);
+    ut.expect(test_fixture.cdr(l_mine).status).to_equal('RATED');
+    select status into l_status from cdrs where cdr_id = l_theirs;
+    ut.expect(l_status).to_equal('NEW');
+  end chunk_range;
+
   -- Rates a month of made up traffic both ways, small batches for the
   -- fast one so allowances carry across batch boundaries, and compares
   -- every field of every record.

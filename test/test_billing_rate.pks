@@ -35,6 +35,9 @@ create or replace package test_billing_rate as
   --%throws(-20001)
   procedure rerate_billed;
 
+  --%test(A parallel chunk rates only its own subscribers)
+  procedure chunk_range;
+
   --%test(The batch rater gives the same results as the row by row one)
   procedure fast_matches_slow;
 end test_billing_rate;
