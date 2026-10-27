@@ -126,3 +126,7 @@ select t.plan_table_output
        table(dbms_xplan.display_cursor(s.sql_id, s.child_number, 'TYPICAL')) t;
 exit
 SQL
+
+echo "== Reports on three generated months"
+mkdir -p build
+sql /tmp/billrun "$app" @reports/run.sql </dev/null | tee build/reports.txt

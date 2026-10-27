@@ -22,10 +22,12 @@ jobs:
       - name: Install, test and benchmark
         run: ./scripts/ci.sh
 
-      - name: Keep the coverage report
+      - name: Keep the coverage report and the reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: coverage
-          path: build/coverage.xml
+          name: reports
+          path: |
+            build/coverage.xml
+            build/reports.txt
           if-no-files-found: ignore
