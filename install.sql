@@ -17,6 +17,10 @@ prompt Creating tables
 @@sql/schema/06_cdrs.sql
 @@sql/schema/07_invoices.sql
 @@sql/schema/08_ops.sql
+@@sql/schema/09_receivables.sql
+
+prompt Creating types
+@@sql/types/ar_types.sql
 
 prompt Compiling packages
 @@sql/packages/billing_errors.pks
@@ -26,6 +30,7 @@ prompt Compiling packages
 @@sql/packages/billing_load.pks
 @@sql/packages/billing_rate.pks
 @@sql/packages/billing_run.pks
+@@sql/packages/billing_ar.pks
 @@sql/packages/billing_jobs.pks
 @@sql/packages/billing_demo.pks
 @@sql/packages/billing_errors.pkb
@@ -35,6 +40,7 @@ prompt Compiling packages
 @@sql/packages/billing_load.pkb
 @@sql/packages/billing_rate.pkb
 @@sql/packages/billing_run.pkb
+@@sql/packages/billing_ar.pkb
 @@sql/packages/billing_jobs.pkb
 @@sql/packages/billing_demo.pkb
 
