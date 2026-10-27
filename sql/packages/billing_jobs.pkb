@@ -65,17 +65,20 @@ create or replace package body billing_jobs as
   end create_jobs;
 
   procedure drop_jobs is
+    -- ORA-27475, the job isn't there.
     e_no_job exception;
     pragma exception_init(e_no_job, -27475);
+
+    procedure drop_one(p_name varchar2) is
+    begin
+      dbms_scheduler.drop_job(p_name, force => true);
+    exception
+      when e_no_job then
+        null;
+    end drop_one;
   begin
-    for j in (select usage_job as name from dual union all select bill_job from dual) loop
-      begin
-        dbms_scheduler.drop_job(j.name, force => true);
-      exception
-        when e_no_job then
-          null;
-      end;
-    end loop;
+    drop_one(usage_job);
+    drop_one(bill_job);
   end drop_jobs;
 
 end billing_jobs;
