@@ -13,7 +13,7 @@ column rated     format 999,990     heading 'Rated'
 column rejected  format 99,990      heading 'Rejected'
 column failed    format 99,990      heading 'Failed'
 column lost_pct  format 990.0       heading 'Lost %'
-column reason    format a46         heading 'Most common reason'
+column reason    format a62         heading 'Most common reason'
 column times     format 99,990      heading 'Times'
 
 prompt

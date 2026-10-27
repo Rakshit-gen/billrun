@@ -8,7 +8,7 @@ set feedback off
 set serveroutput on
 set define on
 set verify off
-set linesize 160 pagesize 100 trimspool on
+set linesize 180 pagesize 100 trimspool on
 
 prompt Building January to March 2031: 300 customers, three resellers
 declare
