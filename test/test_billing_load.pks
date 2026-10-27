@@ -18,5 +18,12 @@ create or replace package test_billing_load as
 
   --%test(Loading twice does nothing the second time)
   procedure loads_once;
+
+  --%test(A file in a directory is staged through an external table like stage_csv does it)
+  procedure stages_file;
+
+  --%test(A file name with a path in it is refused)
+  --%throws(-20009)
+  procedure refuses_paths;
 end test_billing_load;
 /

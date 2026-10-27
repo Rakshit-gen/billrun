@@ -40,6 +40,9 @@ tar -xzf "$work/utPLSQL.tar.gz" -C "$work"
 echo "== Installing utPLSQL $UTPLSQL_VERSION"
 sql /tmp/utPLSQL/source "sys/$SYS_PASSWORD@$DB as sysdba" @install_headless.sql UT3 "$SYS_PASSWORD" users </dev/null
 
+echo "== Creating the directory switch files are dropped in"
+"$RUNTIME" exec "$CONTAINER" mkdir -p /opt/oracle/billrun_in
+
 echo "== Granting $APP_USER what billrun needs"
 sql /tmp "sys/$SYS_PASSWORD@$DB as sysdba" <<SQL
 whenever sqlerror exit failure
@@ -47,6 +50,9 @@ grant create session, create table, create view, create sequence, create procedu
       create trigger, create type, create job to $APP_USER;
 grant execute on dbms_aq to $APP_USER;
 grant execute on dbms_aqadm to $APP_USER;
+grant execute on utl_file to $APP_USER;
+create or replace directory billrun_in as '/opt/oracle/billrun_in';
+grant read, write on directory billrun_in to $APP_USER;
 alter user $APP_USER quota unlimited on users;
 exit
 SQL

@@ -116,5 +116,54 @@ create or replace package body test_billing_load as
     ut.expect(l_n).to_equal(0);
   end loads_once;
 
+  -- Needs the BILLRUN_IN directory, readable and writable; scripts/ci.sh
+  -- creates it.
+  procedure stages_file is
+    c_dir   constant varchar2(30) := 'BILLRUN_IN';
+    c_file  constant varchar2(30) := 'switch-test.csv';
+    l_out   utl_file.file_type;
+    l_n     pls_integer;
+    l_from_file  sys_refcursor;
+    l_from_clob  sys_refcursor;
+  begin
+    l_out := utl_file.fopen(c_dir, c_file, 'w');
+    utl_file.put_line(l_out, header);
+    utl_file.put_line(l_out, '447000999001,VOICE,441614960000,2031-01-06T10:00:00,61' || chr(13));
+    utl_file.put_line(l_out, '');
+    utl_file.put_line(l_out, ' 447000999001 , sms ,447700900123,2031-01-06T10:05:00,1');
+    utl_file.put_line(l_out, 'too,few,fields');
+    utl_file.fclose(l_out);
+
+    l_n := billing_load.stage_file(c_dir, c_file);
+    utl_file.fremove(c_dir, c_file);
+    ut.expect(l_n).to_equal(3);
+
+    l_n := billing_load.stage_csv('switch-clob.csv',
+      header || nl
+      || '447000999001,VOICE,441614960000,2031-01-06T10:00:00,61' || chr(13) || nl
+      || nl
+      || ' 447000999001 , sms ,447700900123,2031-01-06T10:05:00,1' || nl
+      || 'too,few,fields' || nl);
+    open l_from_file for
+      select line_no, fields, msisdn, service, called, started_at, quantity
+        from cdr_staging where file_name = c_file order by line_no;
+    open l_from_clob for
+      select line_no, fields, msisdn, service, called, started_at, quantity
+        from cdr_staging where file_name = 'switch-clob.csv' order by line_no;
+    ut.expect(l_from_file).to_equal(l_from_clob);
+  exception
+    when others then
+      if utl_file.is_open(l_out) then
+        utl_file.fclose(l_out);
+      end if;
+      raise;
+  end stages_file;
+
+  procedure refuses_paths is
+    l_n pls_integer;
+  begin
+    l_n := billing_load.stage_file('BILLRUN_IN', '../etc/passwd');
+  end refuses_paths;
+
 end test_billing_load;
 /
