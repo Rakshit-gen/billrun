@@ -9,6 +9,13 @@ create or replace package billing_load as
   -- and skipped, as are empty lines. Returns the number of rows staged.
   function stage_csv(p_file_name varchar2, p_csv clob) return pls_integer;
 
+  -- Stages a file the switch dropped in a database directory, through an
+  -- inline external table: the database reads the file itself, in one
+  -- INSERT ... SELECT, with no client in between. The same rules as
+  -- stage_csv. p_directory is a directory object the schema can read,
+  -- p_file_name a plain file name in it.
+  function stage_file(p_directory varchar2, p_file_name varchar2) return pls_integer;
+
   -- Checks up to p_max_rows NEW staging rows and moves the good ones to
   -- cdrs, p_batch_size at a time. The rest are marked REJECTED with the
   -- reason: a malformed field, a number nobody had at the time of the
