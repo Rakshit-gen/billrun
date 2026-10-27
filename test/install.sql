@@ -16,6 +16,7 @@ prompt Compiling tests
 @@test_billing_export.pks
 @@test_billing_events.pks
 @@test_event_delivery.pks
+@@test_billing_security.pks
 @@test_billing_admin.pks
 @@test_billing_jobs.pks
 @@test_fixture.pkb
@@ -27,6 +28,7 @@ prompt Compiling tests
 @@test_billing_export.pkb
 @@test_billing_events.pkb
 @@test_event_delivery.pkb
+@@test_billing_security.pkb
 @@test_billing_admin.pkb
 @@test_billing_jobs.pkb
 
