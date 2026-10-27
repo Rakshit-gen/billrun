@@ -73,3 +73,22 @@ fi
 
 echo "== Benchmark"
 sql /tmp/billrun "$app" @bench/bench.sql </dev/null
+
+echo "== Slowest statements in the benchmark"
+sql /tmp "sys/$SYS_PASSWORD@$DB as sysdba" <<SQL
+set linesize 250 pagesize 100 long 100000
+column sql_text format a120 word_wrapped
+column secs format 9990.00
+select sql_id, executions, round(elapsed_time / 1e6, 2) as secs, substr(sql_text, 1, 240) as sql_text
+  from v\$sql
+ where parsing_schema_name = upper('$APP_USER')
+ order by elapsed_time desc
+ fetch first 8 rows only;
+column plan_table_output format a200
+select t.plan_table_output
+  from (select sql_id, child_number from v\$sql
+         where parsing_schema_name = upper('$APP_USER')
+         order by elapsed_time desc fetch first 1 row only) s,
+       table(dbms_xplan.display_cursor(s.sql_id, s.child_number, 'TYPICAL')) t;
+exit
+SQL
