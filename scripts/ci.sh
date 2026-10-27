@@ -46,6 +46,7 @@ echo "== Creating the directory switch files are dropped in"
 echo "== Granting $APP_USER what billrun needs"
 sql /tmp "sys/$SYS_PASSWORD@$DB as sysdba" <<SQL
 whenever sqlerror exit failure
+show parameter cursor_sharing
 grant create session, create table, create view, create sequence, create procedure,
       create trigger, create type, create job to $APP_USER;
 grant execute on dbms_aq to $APP_USER;
