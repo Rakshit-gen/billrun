@@ -21,11 +21,11 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 # Runs sqlplus in the container, in directory $1, as $2, on the rest,
-# reading stdin. Scripts get </dev/null so sqlplus exits when they end.
+# reading stdin. $login is left unquoted so "as sysdba" is its own words. Scripts get </dev/null so sqlplus exits when they end.
 sql() {
   local dir=$1 login=$2
   shift 2
-  "$RUNTIME" exec -i -w "$dir" "$CONTAINER" sqlplus -s -L "$login" "$@"
+  "$RUNTIME" exec -i -w "$dir" "$CONTAINER" sqlplus -s -L $login "$@"
 }
 
 echo "== Copying files into the container"
