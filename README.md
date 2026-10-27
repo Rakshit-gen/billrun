@@ -209,6 +209,42 @@ delivery, partition maintenance) clean up after themselves. The fixture builds t
 expected amounts can be worked out by hand: a plan change on the 11th of
 January charges 10/31 of one fee and 21/31 of the other.
 
+## Performance
+
+`bench/bench.sql` runs in CI on every push: a generated month of 50,000
+call records for 2,000 customers, on the GitHub runner's Oracle Free.
+From run 40538698448:
+
+| step | rows | time | rows/s |
+|---|---:|---:|---:|
+| stage (generate) | 50,000 | 0.77 s | 64,935 |
+| load_staged | 50,000 | 4.95 s | 10,101 |
+| rate_pending_slow | 49,499 | 11.90 s | 4,160 |
+| rate_pending | 49,499 | 3.42 s | 14,473 |
+| rate_parallel, 2 jobs | 49,499 | 6.39 s | 7,746 |
+| bill_cycle | 2,000 invoices | 3.30 s | 606 |
+
+The batch rater is 3.5x the row by row one. The parallel rater is slower
+than the batch rater here. Oracle Free uses at most two CPU threads,
+and on 50,000 records starting the scheduler jobs and committing per
+chunk most likely costs more than a second thread wins back. It's there for a database with cores to spare.
+
+The bill run took 246 seconds in the first runs, 244 of them in the
+insert of the invoice lines. The cursor had first been parsed during the
+tests, when `invoices` held one row, and the plan drove from `invoices`
+into the call records once per invoice. With the lines no longer joined
+to `invoices` (see `docs/design.md`) the same month bills in 3.30
+seconds. After the benchmark CI prints the slowest statements in
+`v$sql` and the plan of the slowest one, so a regression like that one
+shows up in the log.
+
+Line coverage from the tests is 84.9%, and the Cobertura report is kept
+with each run. The lint step recompiles every package with all
+warnings on and lists them; what's left is the missing `AUTHID` clause,
+keywords used as names, `NOCOPY` hints, one deliberate `OTHERS`
+handler around `to_date`, and one implicit conversion in the bill run's
+line insert.
+
 ## Editions
 
 Partitioning, compression and VPD need Enterprise Edition on 19c, and
