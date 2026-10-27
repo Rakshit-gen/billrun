@@ -149,6 +149,34 @@ create or replace package body test_billing_rate as
     ut.expect(test_fixture.cdr(l_early).fail_reason).to_equal('not on any plan on 2030-12-31');
   end failures;
 
+  procedure rerate is
+    l_intl   cdrs.cdr_id%type := test_fixture.add_cdr('VOICE', '33140000000', ts('2031-01-06 10:00:00'), 61);
+    l_local  cdrs.cdr_id%type := test_fixture.add_cdr('VOICE', '441614960000', ts('2031-01-07 10:00:00'), 300);
+    l_used   allowance_usage.used_units%type;
+  begin
+    rate;
+    ut.expect(test_fixture.cdr(l_intl).amount).to_equal(2);
+    update tariffs
+       set price = 1.50
+     where plan_id = billing_admin.plan_id('TEST1') and service = 'VOICE' and dest_class = 'INTL';
+    ut.expect(billing_rate.rerate_cycle(test_fixture.g_jan)).to_equal(2);
+    ut.expect(test_fixture.cdr(l_intl).status).to_equal('NEW');
+    rate;
+    ut.expect(test_fixture.cdr(l_intl).amount).to_equal(3);
+    -- Counted once, not twice.
+    select used_units into l_used
+      from allowance_usage
+     where subscriber_id = test_fixture.g_subscriber and cycle_id = test_fixture.g_jan and service = 'VOICE';
+    ut.expect(l_used).to_equal(300);
+  end rerate;
+
+  procedure rerate_billed is
+    l_n pls_integer;
+  begin
+    l_n := billing_run.bill_cycle(test_fixture.g_jan);
+    l_n := billing_rate.rerate_cycle(test_fixture.g_jan);
+  end rerate_billed;
+
   -- Rates a month of made up traffic both ways, small batches for the
   -- fast one so allowances carry across batch boundaries, and compares
   -- every field of every record.

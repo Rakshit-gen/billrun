@@ -28,6 +28,13 @@ create or replace package test_billing_rate as
   --%test(Records that can't be rated are failed with the reason)
   procedure failures;
 
+  --%test(Rerating a cycle applies a corrected price and recounts allowances)
+  procedure rerate;
+
+  --%test(A billed cycle can't be rerated)
+  --%throws(-20001)
+  procedure rerate_billed;
+
   --%test(The batch rater gives the same results as the row by row one)
   procedure fast_matches_slow;
 end test_billing_rate;
