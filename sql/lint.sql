@@ -1,6 +1,6 @@
 -- Recompiles billrun's packages with every PL/SQL compiler warning on and
--- lists what the compiler says, worst first. Fails if any warning isn't
--- in the list of accepted ones at the bottom.
+-- lists what the compiler says, and counts the warnings that aren't in
+-- the accepted list at the bottom.
 set feedback off
 set serveroutput on
 set linesize 200
