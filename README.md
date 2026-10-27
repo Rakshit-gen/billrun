@@ -61,3 +61,48 @@ run at 02:00 on the 1st, through DBMS_SCHEDULER.
   REJECTED with the reason; a record that can't be rated stays in `cdrs`
   as FAILED with the reason, and can be set back to NEW once the
   reference data is fixed. The `problems` view counts both by reason.
+
+## The Oracle parts
+
+- **Interval partitioning.** `cdrs` gets a partition a month as calls
+  arrive. Every index on it is local, including the primary key
+  `(cdr_id, started_at)` and the duplicate check, so a month can be
+  compressed or dropped without rebuilding anything. The bill run and
+  the rater filter on `started_at` so they only touch the month they
+  need.
+- **Bulk loading.** `load_staged` reads staging with `BULK COLLECT ...
+  LIMIT`, checks each row in PL/SQL so a rejection names the field and
+  the value, then inserts the whole batch with one `FORALL ... SAVE
+  EXCEPTIONS` statement. `SQL%BULK_ROWCOUNT` tells a row that matched no
+  subscriber from one that went in, and `SQL%BULK_EXCEPTIONS` picks out
+  the duplicates the unique index refused, without stopping the batch.
+- **A partial index.** Oracle doesn't index rows whose keys are all null,
+  so `cdr_staging_new_ix` on `case status when 'NEW' then staging_id end`
+  holds only the rows still to load, however many million are done.
+- **Two raters.** `rate_pending_slow` is the obvious version: a cursor
+  loop with a query for the plan, the destination, the tariff, the cycle
+  and the allowance per record. `rate_pending` caches the reference
+  tables in associative arrays, rates a batch in memory, writes it back
+  with one `FORALL UPDATE`, and keeps allowance counters in memory,
+  flushing them with a `FORALL MERGE` per batch. A test rates the same
+  generated month both ways and checks every field matches.
+- **Set based billing.** `bill_cycle` is four statements: an insert of
+  the invoices with gapless numbers from `row_number()`, an insert of all
+  the lines (prorating with `CROSS APPLY`), a `MERGE` of the totals, and
+  the cycle update. It doesn't commit, so it all goes in or none of it.
+- **Locks.** Each process takes its row in `billing_locks` with `SELECT
+  ... FOR UPDATE NOWAIT`, so a second copy of the rater fails at once
+  with `-20005` instead of counting allowances twice.
+- **Errors** are named constants and exceptions in `billing_errors`
+  (`-20001` to `-20007`). `billing_log` writes in an autonomous
+  transaction, so the log line about a failure survives the rollback of
+  the work, with `format_error_backtrace`.
+- **Triggers** keep billed cycles frozen: no update or delete of their
+  invoices or lines, no adjustment booked against them.
+- **Reports** are views using analytic functions: `cycle_revenue`
+  (`lag` for the change on last month), `top_usage` (`rank` within a
+  cycle), `usage_by_destination` (`ratio_to_report`), `usage_by_hour`
+  (running totals), `problems` and `allowance_left`.
+- **Jobs.** `billing_jobs.create_jobs` sets up the two DBMS_SCHEDULER
+  jobs. The job procedures are the only code that commits: a batch at a
+  time, so a crash loses one batch.
