@@ -127,7 +127,7 @@ create or replace package body billing_rate as
     return p_subscriber || '|' || p_cycle || '|' || p_service;
   end usage_key;
 
-  procedure load_caches is
+  procedure load_caches(p_from_sub number, p_to_sub number) is
     l_tariffs   t_tariff_list;
     l_tariff    t_tariff;
     l_segments  t_segment_list;
@@ -181,7 +181,9 @@ create or replace package body billing_rate as
     -- Plan history, only for subscribers with something to rate.
     for r in (select sp.subscriber_id, sp.plan_id, sp.valid_from, sp.valid_to
                 from subscriber_plans sp
-               where sp.subscriber_id in (select subscriber_id from cdrs where status = 'NEW')
+               where sp.subscriber_id in (select subscriber_id from cdrs
+                                           where status = 'NEW'
+                                             and subscriber_id between p_from_sub and p_to_sub)
                order by sp.subscriber_id, sp.valid_from) loop
       l_segments.delete;
       if g_segments.exists(r.subscriber_id) then
@@ -397,13 +399,16 @@ create or replace package body billing_rate as
          values (s.subscriber_id, s.cycle_id, s.service, s.used_units);
   end flush_usage;
 
-  function rate_pending(p_max_rows pls_integer default 100000, p_batch_size pls_integer default 1000)
+  -- Rates NEW records of subscribers p_from_sub to p_to_sub. The caller
+  -- holds the RATER lock.
+  function rate_range(p_max_rows pls_integer, p_batch_size pls_integer, p_from_sub number, p_to_sub number)
     return pls_integer
   is
     cursor c_new is
       select cdr_id, subscriber_id, service, called, started_at, quantity
         from cdrs
        where status = 'NEW'
+         and subscriber_id between p_from_sub and p_to_sub
        order by subscriber_id, started_at, cdr_id
        fetch first p_max_rows rows only;
     type t_new is table of c_new%rowtype index by pls_integer;
@@ -412,11 +417,10 @@ create or replace package body billing_rate as
     l_out   t_results;
     l_done  pls_integer := 0;
   begin
-    billing_errors.take_lock('RATER');
     -- Open the cursor before reading the plan history: every subscriber
     -- the cursor will return is then in the cache.
     open c_new;
-    load_caches;
+    load_caches(p_from_sub, p_to_sub);
     loop
       fetch c_new bulk collect into l_rows limit p_batch_size;
       exit when l_rows.count = 0;
@@ -454,7 +458,84 @@ create or replace package body billing_rate as
         close c_new;
       end if;
       raise;
+  end rate_range;
+
+  function rate_pending(p_max_rows pls_integer default 100000, p_batch_size pls_integer default 1000)
+    return pls_integer
+  is
+  begin
+    billing_errors.take_lock('RATER');
+    return rate_range(p_max_rows, p_batch_size, 0, 1e38);
   end rate_pending;
+
+  procedure rate_chunk(p_start_id number, p_end_id number) is
+    l_n pls_integer;
+  begin
+    l_n := rate_range(1e9, 1000, p_start_id, p_end_id);
+  end rate_chunk;
+
+  function rate_parallel(p_parallel_level pls_integer default 4, p_chunks pls_integer default 16)
+    return pls_integer
+  is
+    l_task    varchar2(128);
+    l_before  pls_integer;
+    l_after   pls_integer;
+    l_status  pls_integer;
+    l_error   varchar2(4000);
+
+    procedure clean_up is
+    begin
+      if l_task is not null then
+        dbms_parallel_execute.drop_task(l_task);
+      end if;
+      billing_errors.release_lock('RATER');
+    end clean_up;
+  begin
+    billing_errors.hold_lock('RATER');
+    select count(*) into l_before from cdrs where status = 'NEW';
+    if l_before = 0 then
+      clean_up;
+      return 0;
+    end if;
+
+    l_task := dbms_parallel_execute.generate_task_name('BILLRUN_RATE_');
+    dbms_parallel_execute.create_task(l_task);
+    -- Equal numbers of subscribers per chunk, from those with work, in
+    -- id order so the ranges don't overlap.
+    dbms_parallel_execute.create_chunks_by_sql(l_task,
+      'select min(subscriber_id), max(subscriber_id)
+         from (select subscriber_id, ntile(' || to_char(p_chunks) || ') over (order by subscriber_id) as chunk
+                 from (select distinct subscriber_id from cdrs where status = ''NEW''))
+        group by chunk',
+      by_rowid => false);
+    dbms_parallel_execute.run_task(l_task,
+      'begin billing_rate.rate_chunk(:start_id, :end_id); end;',
+      dbms_sql.native,
+      parallel_level => p_parallel_level);
+
+    -- A chunk that failed (a lock timeout, say) gets one more go.
+    l_status := dbms_parallel_execute.task_status(l_task);
+    if l_status = dbms_parallel_execute.finished_with_error then
+      dbms_parallel_execute.resume_task(l_task);
+      l_status := dbms_parallel_execute.task_status(l_task);
+    end if;
+    if l_status <> dbms_parallel_execute.finished then
+      select max(error_message) into l_error
+        from user_parallel_execute_chunks
+       where task_name = l_task and status = 'PROCESSED_WITH_ERROR';
+      raise_application_error(billing_errors.busy, 'parallel rating did not finish: ' || l_error);
+    end if;
+
+    select count(*) into l_after from cdrs where status = 'NEW';
+    billing_log.info('billing_rate', 'rated ' || (l_before - l_after) || ' records in parallel, '
+      || p_chunks || ' chunks, ' || p_parallel_level || ' at a time');
+    clean_up;
+    return l_before - l_after;
+  exception
+    when others then
+      clean_up;
+      raise;
+  end rate_parallel;
 
   ---------------------------------------------------------------------
   -- The row by row rater.

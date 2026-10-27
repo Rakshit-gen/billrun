@@ -16,6 +16,19 @@ create or replace package billing_rate as
   function rate_pending(p_max_rows pls_integer default 100000, p_batch_size pls_integer default 1000)
     return pls_integer;
 
+  -- rate_pending across p_parallel_level sessions at once, with
+  -- DBMS_PARALLEL_EXECUTE: the subscribers with work are split into
+  -- p_chunks ranges and each range is rated, and committed, as a
+  -- scheduler job. Ranges are by subscriber, so a line's allowance is
+  -- only ever counted in one session. Commits, unlike rate_pending, and
+  -- holds the RATER lock until the last chunk is done. Needs CREATE JOB.
+  function rate_parallel(p_parallel_level pls_integer default 4, p_chunks pls_integer default 16)
+    return pls_integer;
+
+  -- One chunk of rate_parallel. Not for calling directly: it takes no
+  -- lock, relying on rate_parallel's.
+  procedure rate_chunk(p_start_id number, p_end_id number);
+
   -- The same rules one record and one query at a time: the way this is
   -- often first written. Kept as the reference that rate_pending is
   -- tested and timed against.
