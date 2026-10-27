@@ -19,8 +19,25 @@ create or replace package body billing_maint as
     billing_log.info('billing_maint', 'compressed call records for ' || to_char(l_month, 'YYYY-MM'));
   end compress_month;
 
-  function purge_before(p_before date) return pls_integer is
+  function partition_of(p_month date) return varchar2 is
+    l_month date := trunc(p_month, 'MM');
+  begin
+    for p in (select partition_name, high_value
+                from user_tab_partitions
+               where table_name = 'CDRS'
+               order by partition_position) loop
+      if l_month < upper_bound(p.high_value) then
+        -- The first partition whose bound is above the month; it's that
+        -- month's only if the bound is the month after.
+        return case when upper_bound(p.high_value) = add_months(l_month, 1) then p.partition_name end;
+      end if;
+    end loop;
+    return null;
+  end partition_of;
+
+  function purge_before(p_before date, p_from date default null) return pls_integer is
     l_before   date := trunc(p_before, 'MM');
+    l_from     date := trunc(nvl(p_from, date '0001-01-01'), 'MM');
     l_upper    date;
     l_lower    date;
     l_open     pls_integer;
@@ -36,6 +53,7 @@ create or replace package body billing_maint as
       l_upper := upper_bound(p.high_value);
       exit when l_upper > l_before;
       l_lower := add_months(l_upper, -1);
+      continue when l_lower < l_from;
       select count(*) into l_open
         from cdrs c
        where c.started_at >= l_lower and c.started_at < l_upper
