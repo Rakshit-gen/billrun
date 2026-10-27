@@ -11,7 +11,9 @@ It runs on Oracle 19c and later; CI tests it on Oracle Database 23ai Free
 with utPLSQL, with line coverage, compiler warnings and a benchmark in
 every run.
 
-`docs/design.md` has the data model and why it's built the way it is.
+`docs/design.md` has the data model and why it's built the way it is,
+`docs/rca.md` the root cause analyses of two problems found in CI, and
+`CHANGELOG.md` what's in each release.
 
 ## How it works
 
@@ -208,6 +210,26 @@ that's rolled back. The few that have to commit (the jobs, event
 delivery, partition maintenance) clean up after themselves. The fixture builds two plans with round prices, so
 expected amounts can be worked out by hand: a plan change on the 11th of
 January charges 10/31 of one fee and 21/31 of the other.
+
+## Reports
+
+Each report in `reports/` starts with the requirement it was written
+to, and takes its parameters on the command line:
+
+- `month_end.sql YYYY-MM`: what finance invoiced in the month, by
+  reseller, split into plan fees, usage and adjustments, with tax and a
+  total row from `GROUP BY ROLLUP`. It checks every invoice against its
+  lines and fails if one doesn't add up.
+- `aged_debt.sql YYYY-MM-DD`: the 20 customers collections should call
+  first, by days past due, with money on account and the last dunning
+  step, over the pipelined `billing_ar.aging`.
+- `feed_quality.sql`: per switch file, records received, rated,
+  rejected and failed, and the most common reason, with the bad values
+  masked so the same reason counts as one.
+
+`reports/run.sql` builds three billed months with payments and dunning,
+runs the three, and rolls everything back. CI runs it on every push and
+keeps the output with the coverage report.
 
 ## Performance
 
