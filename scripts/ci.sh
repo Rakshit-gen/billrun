@@ -69,6 +69,9 @@ sql /tmp/billrun "$app" @install.sql </dev/null
 sql /tmp/billrun "$app" @uninstall.sql </dev/null
 sql /tmp/billrun "$app" @install.sql </dev/null
 
+echo "== Compiler warnings"
+sql /tmp/billrun "$app" @sql/lint.sql </dev/null
+
 echo "== Installing the tests"
 sql /tmp/billrun/test "$app" @install.sql </dev/null
 
