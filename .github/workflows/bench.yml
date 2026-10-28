@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      sizes:
+        description: records:customers:runs, space separated
+        default: "10000:500:3 50000:2000:3 200000:8000:3"
 
 jobs:
   bench:
@@ -25,7 +29,7 @@ jobs:
 
       - name: Benchmark at three sizes
         env:
-          SIZES: "10000:500:3 50000:2000:3 200000:8000:3"
+          SIZES: ${{ inputs.sizes || '10000:500:3 50000:2000:3 200000:8000:3' }}
         run: |
           mkdir -p build
           ./scripts/bench.sh | tee build/bench.txt
