@@ -1,0 +1,39 @@
+name: bench
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Start Oracle Database Free
+        uses: gvenzl/setup-oracle-free@v1
+        with:
+          tag: 23
+          oracle-password: billrun
+          app-user: billrun
+          app-user-password: billrun
+
+      - name: Install billrun
+        run: ./scripts/install.sh
+
+      - name: Benchmark at three sizes
+        env:
+          SIZES: "10000:500:3 50000:2000:3 200000:8000:3"
+        run: |
+          mkdir -p build
+          ./scripts/bench.sh | tee build/bench.txt
+
+      - name: Keep the output
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bench
+          path: build/bench.txt
+          if-no-files-found: ignore
