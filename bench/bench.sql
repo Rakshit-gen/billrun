@@ -1,10 +1,11 @@
--- Times a month of made up usage through the loader, all three raters
--- and the bill run. The arguments are the call records, the customers
--- and how many times to run each rater:
+-- Times a month of made up usage through the loader, all three raters,
+-- the bill run and receivables. The arguments are the call records, the
+-- customers and how many times to run each rater:
 --   sqlplus billrun/password@//localhost/FREEPDB1 @bench/bench.sql 50000 2000 3
 -- Uses March 2030, which nothing else touches. The parallel rater runs
 -- in other sessions, which only see committed rows, so the data is
--- committed, and deleted again at the end; the bill run is rolled back.
+-- committed, and deleted again at the end; the bill run and the
+-- payments and dunning after it are rolled back.
 
 whenever sqlerror exit failure rollback
 set verify off
@@ -24,6 +25,8 @@ declare
   l_parallel   number;
   l_expected   number;
   l_rated      boolean := false;
+  l_id         number;
+  l_as_of      date;
 
   -- One number for what the raters wrote on every record of the month,
   -- so the faster raters can be checked against the row by row one.
@@ -155,6 +158,26 @@ begin
   l_start := dbms_utility.get_time;
   l_n := billing_run.bill_cycle(l_cycle);
   report('bill_cycle (invoices)', l_n, since);
+
+  -- Three customers in four pay in full on the day the invoice is
+  -- issued; the rest are chased 61 days after it falls due.
+  l_start := dbms_utility.get_time;
+  l_n := 0;
+  for r in (select invoice_id, customer_id, total, issued_at, due_date
+              from invoices where cycle_id = l_cycle and total > 0 and mod(invoice_id, 4) <> 0) loop
+    l_id := billing_ar.record_payment(r.customer_id, r.total, 'BENCH-' || r.invoice_id, r.issued_at);
+    l_n := l_n + 1;
+  end loop;
+  report('record_payment', l_n, since);
+
+  select max(due_date) + 61 into l_as_of from invoices where cycle_id = l_cycle;
+  l_start := dbms_utility.get_time;
+  l_n := billing_ar.run_dunning(l_as_of);
+  report('run_dunning (steps)', l_n, since);
+
+  l_start := dbms_utility.get_time;
+  select count(*) into l_n from table(billing_ar.aging(l_as_of));
+  report('aging (customers)', l_n, since);
 
   clean_up;
 exception
