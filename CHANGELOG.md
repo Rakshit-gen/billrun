@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- The aging report sums allocations once instead of once per invoice
+  and per payment: 0.10 s instead of 4.16 s for 2,000 customers.
+- A bench workflow runs the benchmark at 10,000, 50,000 and 200,000
+  call records on every push to main, or at chosen sizes by hand.
+- The benchmark takes its size as arguments, runs each rater three
+  times with the median and range, fails if the batch or parallel
+  rater rates any record differently from the row by row one, and
+  times payments, dunning and the aging report.
+- `scripts/install.sh` and `scripts/bench.sh` split out of `ci.sh`, and
+  `make bench`.
+
 ## 1.0.0, 2026-10-27
 
 First release.
