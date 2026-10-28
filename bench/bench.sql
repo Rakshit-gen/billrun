@@ -47,6 +47,47 @@ declare
     end if;
   end check_same;
 
+  -- Seconds since l_start, from dbms_utility.get_time's hundredths.
+  function since return number is
+  begin
+    return (dbms_utility.get_time - l_start) / 100;
+  end since;
+
+  procedure report(p_step varchar2, p_rows pls_integer, p_secs number) is
+  begin
+    dbms_output.put_line(rpad(p_step, 26) || lpad(p_rows, 8) || ' rows'
+      || lpad(to_char(p_secs, 'FM990.00'), 9) || ' s'
+      || lpad(case when p_secs > 0 then to_char(round(p_rows / p_secs)) end, 10) || ' rows/s');
+  end report;
+
+  procedure unrate is
+  begin
+    update cdrs
+       set status = 'NEW', cycle_id = null, late = 'N', dest_class = null, peak = null, tariff_id = null,
+           rated_units = null, included_units = null, charged_units = null, amount = null,
+           fail_reason = null, rated_at = null
+     where started_at >= c_month and started_at < add_months(c_month, 1);
+    delete from allowance_usage where cycle_id = l_cycle;
+    commit;
+  end unrate;
+
+  procedure clean_up is
+  begin
+    rollback;
+    delete from allowance_usage where cycle_id = l_cycle;
+    delete from cdrs where started_at >= c_month and started_at < add_months(c_month, 1);
+    delete from cdr_staging where file_name = 'bench.csv';
+    delete from subscriber_plans
+     where subscriber_id in (select s.subscriber_id from subscribers s
+                               join customers c on c.customer_id = s.customer_id
+                              where c.name like 'Bench customer %');
+    delete from subscribers
+     where customer_id in (select customer_id from customers where name like 'Bench customer %');
+    delete from customers where name like 'Bench customer %';
+    delete from bill_cycles where cycle_id = l_cycle;
+    commit;
+  end clean_up;
+
   -- Rates the month c_runs times with one rater, from unrated each time,
   -- checks every run against the first run of rate_pending_slow, and
   -- prints the median, fastest and slowest. Returns the median.
@@ -88,47 +129,6 @@ declare
       || case when l_median > 0 then round(l_n / l_median) end || ' rows/s');
     return l_median;
   end rate_runs;
-
-  -- Seconds since l_start, from dbms_utility.get_time's hundredths.
-  function since return number is
-  begin
-    return (dbms_utility.get_time - l_start) / 100;
-  end since;
-
-  procedure report(p_step varchar2, p_rows pls_integer, p_secs number) is
-  begin
-    dbms_output.put_line(rpad(p_step, 26) || lpad(p_rows, 8) || ' rows'
-      || lpad(to_char(p_secs, 'FM990.00'), 9) || ' s'
-      || lpad(case when p_secs > 0 then to_char(round(p_rows / p_secs)) end, 10) || ' rows/s');
-  end report;
-
-  procedure unrate is
-  begin
-    update cdrs
-       set status = 'NEW', cycle_id = null, late = 'N', dest_class = null, peak = null, tariff_id = null,
-           rated_units = null, included_units = null, charged_units = null, amount = null,
-           fail_reason = null, rated_at = null
-     where started_at >= c_month and started_at < add_months(c_month, 1);
-    delete from allowance_usage where cycle_id = l_cycle;
-    commit;
-  end unrate;
-
-  procedure clean_up is
-  begin
-    rollback;
-    delete from allowance_usage where cycle_id = l_cycle;
-    delete from cdrs where started_at >= c_month and started_at < add_months(c_month, 1);
-    delete from cdr_staging where file_name = 'bench.csv';
-    delete from subscriber_plans
-     where subscriber_id in (select s.subscriber_id from subscribers s
-                               join customers c on c.customer_id = s.customer_id
-                              where c.name like 'Bench customer %');
-    delete from subscribers
-     where customer_id in (select customer_id from customers where name like 'Bench customer %');
-    delete from customers where name like 'Bench customer %';
-    delete from bill_cycles where cycle_id = l_cycle;
-    commit;
-  end clean_up;
 begin
   dbms_output.put_line(c_records || ' call records, ' || c_customers || ' customers, '
     || c_runs || ' runs of each rater, all checked against the first run of rate_pending_slow');
