@@ -31,7 +31,7 @@ sql /tmp "sys/$SYS_PASSWORD@$DB as sysdba" <<SQL
 set heading off feedback off pagesize 0
 select banner_full from v\$version;
 select 'cpu_count ' || value from v\$parameter where name = 'cpu_count';
-select 'sga_target ' || round(value / 1048576) || ' MB' from v\$parameter where name = 'sga_target';
+select name || ' ' || round(value / 1048576) || ' MB' from v\$parameter where name in ('sga_max_size', 'pga_aggregate_target') order by name;
 exit
 SQL
 for size in $SIZES; do
