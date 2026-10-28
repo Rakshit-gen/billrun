@@ -20,6 +20,27 @@ declare
   l_slow       number;
   l_fast       number;
   l_parallel   number;
+  l_expected   number;
+
+  -- One number for what the raters wrote on every record of the month,
+  -- so the faster raters can be checked against the row by row one.
+  function fingerprint return number is
+    l_sum number;
+  begin
+    select sum(ora_hash(cdr_id || '|' || status || '|' || tariff_id || '|' || charged_units || '|' || amount))
+      into l_sum
+      from cdrs
+     where started_at >= c_month and started_at < add_months(c_month, 1);
+    return l_sum;
+  end fingerprint;
+
+  procedure check_same(p_rater varchar2) is
+  begin
+    if fingerprint <> l_expected then
+      raise_application_error(-20999, p_rater || ' rated the month differently from rate_pending_slow');
+    end if;
+    dbms_output.put_line(p_rater || ' rated every record the same as rate_pending_slow');
+  end check_same;
 
   -- Seconds since l_start, from dbms_utility.get_time's hundredths.
   function since return number is
@@ -83,6 +104,7 @@ begin
   l_slow := since;
   report('rate_pending_slow', l_n, l_slow);
   commit;
+  l_expected := fingerprint;
   unrate;
 
   l_start := dbms_utility.get_time;
@@ -90,12 +112,14 @@ begin
   l_fast := since;
   report('rate_pending', l_n, l_fast);
   commit;
+  check_same('rate_pending');
   unrate;
 
   l_start := dbms_utility.get_time;
   l_n := billing_rate.rate_parallel(p_parallel_level => 2, p_chunks => 8);
   l_parallel := since;
   report('rate_parallel (2 jobs)', l_n, l_parallel);
+  check_same('rate_parallel');
 
   if l_fast > 0 and l_parallel > 0 then
     dbms_output.put_line('rate_pending is ' || to_char(l_slow / l_fast, 'FM990.0')
