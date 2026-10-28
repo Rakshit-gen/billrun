@@ -105,6 +105,14 @@ fi
 awk -v r="$rate" 'BEGIN { printf "line coverage: %.1f%%\n", r * 100 }'
 
 echo "== Benchmark"
+echo "runner: $(nproc) CPUs, $(lscpu 2>/dev/null | sed -n 's/^Model name: *//p' | head -1), $(free -g 2>/dev/null | awk '/^Mem:/ { print $2 " GB" }') memory"
+sql /tmp "sys/$SYS_PASSWORD@$DB as sysdba" <<SQL
+set heading off feedback off pagesize 0
+select banner_full from v\$version;
+select 'cpu_count ' || value from v\$parameter where name = 'cpu_count';
+select 'sga_target ' || round(value / 1048576) || ' MB' from v\$parameter where name = 'sga_target';
+exit
+SQL
 sql /tmp/billrun "$app" @bench/bench.sql 50000 2000 3 </dev/null
 
 echo "== Slowest statements in the benchmark, and the plan of the slowest SQL"
