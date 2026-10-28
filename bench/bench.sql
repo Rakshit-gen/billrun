@@ -1,6 +1,7 @@
 -- Times a month of made up usage through the loader, all three raters
--- and the bill run. The arguments are the call records and customers:
---   sqlplus billrun/password@//localhost/FREEPDB1 @bench/bench.sql 50000 2000
+-- and the bill run. The arguments are the call records, the customers
+-- and how many times to run each rater:
+--   sqlplus billrun/password@//localhost/FREEPDB1 @bench/bench.sql 50000 2000 3
 -- Uses March 2030, which nothing else touches. The parallel rater runs
 -- in other sessions, which only see committed rows, so the data is
 -- committed, and deleted again at the end; the bill run is rolled back.
@@ -13,6 +14,7 @@ set serveroutput on
 declare
   c_records    constant pls_integer := &1;
   c_customers  constant pls_integer := &2;
+  c_runs       constant pls_integer := &3;
   c_month      constant date := date '2030-03-01';
   l_cycle      bill_cycles.cycle_id%type;
   l_start      pls_integer;
@@ -21,6 +23,7 @@ declare
   l_fast       number;
   l_parallel   number;
   l_expected   number;
+  l_rated      boolean := false;
 
   -- One number for what the raters wrote on every record of the month,
   -- so the faster raters can be checked against the row by row one.
@@ -39,8 +42,49 @@ declare
     if fingerprint <> l_expected then
       raise_application_error(-20999, p_rater || ' rated the month differently from rate_pending_slow');
     end if;
-    dbms_output.put_line(p_rater || ' rated every record the same as rate_pending_slow');
   end check_same;
+
+  -- Rates the month c_runs times with one rater, from unrated each time,
+  -- checks every run against the first run of rate_pending_slow, and
+  -- prints the median, fastest and slowest. Returns the median.
+  function rate_runs(p_rater varchar2) return number is
+    l_secs    sys.odcinumberlist := sys.odcinumberlist();
+    l_median  number;
+    l_min     number;
+    l_max     number;
+  begin
+    for i in 1 .. c_runs loop
+      if l_rated then
+        unrate;
+      end if;
+      l_start := dbms_utility.get_time;
+      if p_rater = 'rate_pending_slow' then
+        l_n := billing_rate.rate_pending_slow(p_max_rows => c_records * 2);
+      elsif p_rater = 'rate_pending' then
+        l_n := billing_rate.rate_pending(p_max_rows => c_records * 2);
+      else
+        l_n := billing_rate.rate_parallel(p_parallel_level => 2, p_chunks => 8);
+      end if;
+      l_secs.extend;
+      l_secs(i) := since;
+      commit;
+      l_rated := true;
+      if l_expected is null then
+        l_expected := fingerprint;
+      else
+        check_same(p_rater);
+      end if;
+    end loop;
+
+    select median(column_value), min(column_value), max(column_value)
+      into l_median, l_min, l_max
+      from table(l_secs);
+    dbms_output.put_line(rpad(p_rater, 26) || lpad(l_n, 8) || ' rows'
+      || '  median ' || to_char(l_median, 'FM990.00') || ' s, min ' || to_char(l_min, 'FM990.00')
+      || ' s, max ' || to_char(l_max, 'FM990.00') || ' s, '
+      || case when l_median > 0 then round(l_n / l_median) end || ' rows/s');
+    return l_median;
+  end rate_runs;
 
   -- Seconds since l_start, from dbms_utility.get_time's hundredths.
   function since return number is
@@ -83,7 +127,8 @@ declare
     commit;
   end clean_up;
 begin
-  dbms_output.put_line(c_records || ' call records, ' || c_customers || ' customers');
+  dbms_output.put_line(c_records || ' call records, ' || c_customers || ' customers, '
+    || c_runs || ' runs of each rater, all checked against the first run of rate_pending_slow');
   billing_demo.add_customers(c_customers, date '2030-01-01', 42);
   update customers set name = replace(name, 'Demo customer', 'Bench customer')
    where name like 'Demo customer %';
@@ -99,30 +144,11 @@ begin
   report('load_staged', l_n, since);
   commit;
 
-  l_start := dbms_utility.get_time;
-  l_n := billing_rate.rate_pending_slow(p_max_rows => c_records * 2);
-  l_slow := since;
-  report('rate_pending_slow', l_n, l_slow);
-  commit;
-  l_expected := fingerprint;
-  unrate;
-
-  l_start := dbms_utility.get_time;
-  l_n := billing_rate.rate_pending(p_max_rows => c_records * 2);
-  l_fast := since;
-  report('rate_pending', l_n, l_fast);
-  commit;
-  check_same('rate_pending');
-  unrate;
-
-  l_start := dbms_utility.get_time;
-  l_n := billing_rate.rate_parallel(p_parallel_level => 2, p_chunks => 8);
-  l_parallel := since;
-  report('rate_parallel (2 jobs)', l_n, l_parallel);
-  check_same('rate_parallel');
-
+  l_slow := rate_runs('rate_pending_slow');
+  l_fast := rate_runs('rate_pending');
+  l_parallel := rate_runs('rate_parallel');
   if l_fast > 0 and l_parallel > 0 then
-    dbms_output.put_line('rate_pending is ' || to_char(l_slow / l_fast, 'FM990.0')
+    dbms_output.put_line('by median, rate_pending is ' || to_char(l_slow / l_fast, 'FM990.0')
       || 'x rate_pending_slow; rate_parallel is ' || to_char(l_slow / l_parallel, 'FM990.0') || 'x');
   end if;
 
