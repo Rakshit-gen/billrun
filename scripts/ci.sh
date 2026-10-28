@@ -105,7 +105,7 @@ fi
 awk -v r="$rate" 'BEGIN { printf "line coverage: %.1f%%\n", r * 100 }'
 
 echo "== Benchmark"
-sql /tmp/billrun "$app" @bench/bench.sql </dev/null
+sql /tmp/billrun "$app" @bench/bench.sql 50000 2000 </dev/null
 
 echo "== Slowest statements in the benchmark, and the plan of the slowest SQL"
 sql /tmp "sys/$SYS_PASSWORD@$DB as sysdba" <<SQL

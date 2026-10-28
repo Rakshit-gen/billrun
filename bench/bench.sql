@@ -1,18 +1,18 @@
 -- Times a month of made up usage through the loader, all three raters
--- and the bill run:
---   sqlplus billrun/password@//localhost/FREEPDB1 @bench/bench.sql
+-- and the bill run. The arguments are the call records and customers:
+--   sqlplus billrun/password@//localhost/FREEPDB1 @bench/bench.sql 50000 2000
 -- Uses March 2030, which nothing else touches. The parallel rater runs
 -- in other sessions, which only see committed rows, so the data is
 -- committed, and deleted again at the end; the bill run is rolled back.
 
 whenever sqlerror exit failure rollback
-set define off
+set verify off
 set feedback off
 set serveroutput on
 
 declare
-  c_records    constant pls_integer := 50000;
-  c_customers  constant pls_integer := 2000;
+  c_records    constant pls_integer := &1;
+  c_customers  constant pls_integer := &2;
   c_month      constant date := date '2030-03-01';
   l_cycle      bill_cycles.cycle_id%type;
   l_start      pls_integer;
@@ -62,6 +62,7 @@ declare
     commit;
   end clean_up;
 begin
+  dbms_output.put_line(c_records || ' call records, ' || c_customers || ' customers');
   billing_demo.add_customers(c_customers, date '2030-01-01', 42);
   update customers set name = replace(name, 'Demo customer', 'Bench customer')
    where name like 'Demo customer %';
