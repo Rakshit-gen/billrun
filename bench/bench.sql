@@ -176,9 +176,12 @@ begin
   l_n := billing_ar.run_dunning(l_as_of);
   report('run_dunning (steps)', l_n, since);
 
+  -- With row source statistics, so bench.sh can show where the time goes.
+  execute immediate 'alter session set statistics_level = all';
   l_start := dbms_utility.get_time;
   select count(*) into l_n from table(billing_ar.aging(l_as_of));
   report('aging (customers)', l_n, since);
+  execute immediate 'alter session set statistics_level = typical';
 
   clean_up;
 exception

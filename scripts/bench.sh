@@ -57,6 +57,13 @@ select t.plan_table_output
            and command_type <> 47 -- PL/SQL blocks have no plan
          order by elapsed_time desc fetch first 1 row only) s,
        table(dbms_xplan.display_cursor(s.sql_id, s.child_number, 'TYPICAL')) t;
+prompt == The aging query's last run, with actual rows and time per step
+select t.plan_table_output
+  from (select sql_id, child_number from v\$sql
+         where parsing_schema_name = upper('$APP_USER')
+           and upper(sql_text) like 'WITH OPEN_INVOICES%'
+         order by last_active_time desc fetch first 1 row only) s,
+       table(dbms_xplan.display_cursor(s.sql_id, s.child_number, 'ALLSTATS LAST')) t;
 exit
 SQL
 
