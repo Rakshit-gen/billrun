@@ -1,6 +1,6 @@
 # Root cause analyses
 
-Two problems found in CI while building billrun, written up the way
+Three problems found in CI while building billrun, written up the way
 they were worked out. Every number is from a CI log; the run ids are
 GitHub Actions runs of this repository.
 
@@ -101,3 +101,46 @@ clause the error named, character by character, would have found the
 colon in one run instead of three. Removing the file name bind didn't
 change the error, so it may never have been part of the problem; the
 validated literal stays, as it's no less safe.
+
+## 3. The aging report grew with the square of the payments
+
+**Symptom.** The bench workflow runs the benchmark at three sizes. In
+run 40691853180 the aging report took 0.10 s for 125 customers, 0.37 s
+for 500 and 4.16 s for 2,000: four times the customers, eleven times
+the time. Nothing else in the benchmark grew faster than its row count.
+
+**A wrong guess.** The `unallocated` part of the query looks up
+`payment_allocations` by `payment_id` for every payment, and only
+`invoice_id` had an index of its own. But the primary key is
+`(payment_id, invoice_id)`, so `payment_id` was indexed already.
+
+**What the plan says.** The benchmark was changed to run the aging
+query with `statistics_level = all` and print its plan with actual
+rows (commit fa22e7f). Run 40693226078, 2,000 customers, 4.37 s:
+
+```
+| Id | Operation                  | Name     | Starts | E-Rows | A-Rows | A-Time   |
+|  5 |    TABLE ACCESS FULL       | PAYMENTS |   6000 |    375 |    36M | 00:00.79 |
+| 10 |    TABLE ACCESS FULL       | INVOICES |   6000 |    500 |    48M | 00:01.19 |
+```
+
+Both lookups were scalar subqueries, one per invoice and one per
+payment. Each joined the allocations it found to `payments` or
+`invoices` with a hash join, and the hash join read the whole other
+table every time: 6,000 full scans of each, 752K buffer gets.
+
+**Root cause.** The optimizer expected 375 payments and 500 invoices
+(dynamic sampling, level 2, on tables the benchmark had just filled),
+so a full scan per row looked cheap. With the correct counts it would
+still have been one lookup per row; the query asked for that shape.
+
+**Fix** (commit 2cc4877). The allocations are summed once, grouped by
+invoice and by payment, and joined to `invoices` and `payments`. The
+results are the same; the 63 tests, aging among them, pass.
+
+**Result.** Run 40694601117: aging for 2,000 customers in 0.10 s, 4,543
+buffer gets, every table read once.
+
+**Prevention.** The bench workflow runs at three sizes, so a step that
+grows faster than its rows shows up as a ratio between them, and it
+prints the aging query's plan with actual rows on every run.
