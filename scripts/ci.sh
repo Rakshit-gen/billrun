@@ -28,43 +28,22 @@ sql() {
   "$RUNTIME" exec -i -w "$dir" "$CONTAINER" sqlplus -s -L $login "$@"
 }
 
-echo "== Copying files into the container"
+echo "== Copying utPLSQL into the container"
 curl -fsSL -o "$work/utPLSQL.tar.gz" \
   "https://github.com/utPLSQL/utPLSQL/releases/download/v$UTPLSQL_VERSION/utPLSQL.tar.gz"
 echo "$UTPLSQL_SHA256  $work/utPLSQL.tar.gz" | sha256sum -c -
 tar -xzf "$work/utPLSQL.tar.gz" -C "$work"
-"$RUNTIME" exec "$CONTAINER" rm -rf /tmp/billrun /tmp/utPLSQL
+"$RUNTIME" exec "$CONTAINER" rm -rf /tmp/utPLSQL
 "$RUNTIME" cp "$work/utPLSQL" "$CONTAINER:/tmp/utPLSQL"
-"$RUNTIME" cp . "$CONTAINER:/tmp/billrun"
 
 echo "== Installing utPLSQL $UTPLSQL_VERSION"
 sql /tmp/utPLSQL/source "sys/$SYS_PASSWORD@$DB as sysdba" @install_headless.sql UT3 "$SYS_PASSWORD" users </dev/null
 
-echo "== Creating the directory switch files are dropped in"
-"$RUNTIME" exec "$CONTAINER" mkdir -p /opt/oracle/billrun_in
-
-echo "== Granting $APP_USER what billrun needs"
-sql /tmp "sys/$SYS_PASSWORD@$DB as sysdba" <<SQL
-whenever sqlerror exit failure
-grant create session, create table, create view, create sequence, create procedure,
-      create trigger, create type, create job to $APP_USER;
-grant execute on dbms_aq to $APP_USER;
-grant execute on dbms_aqadm to $APP_USER;
-grant execute on utl_file to $APP_USER;
-grant execute on dbms_lock to $APP_USER;
-grant execute on dbms_parallel_execute to $APP_USER;
-grant execute on dbms_rls to $APP_USER;
-grant create any context, drop any context to $APP_USER;
-create or replace directory billrun_in as '/opt/oracle/billrun_in';
-grant read, write on directory billrun_in to $APP_USER;
-alter user $APP_USER quota unlimited on users;
-exit
-SQL
-
 app="$APP_USER/$APP_PASSWORD@$DB"
 
-echo "== Installing billrun, removing it, and installing it again"
-sql /tmp/billrun "$app" @install.sql </dev/null
+./scripts/install.sh
+
+echo "== Removing billrun and installing it again"
 sql /tmp/billrun "$app" @uninstall.sql </dev/null
 sql /tmp/billrun "$app" @install.sql </dev/null
 
