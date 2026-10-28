@@ -7,9 +7,9 @@ and tax. Then it runs receivables: payments allocated oldest invoice
 first, dunning up to suspension, and an aging report. Invoices, payments
 and allowance alerts go out as events on an Advanced Queuing queue, and
 resellers see only their own customers through Virtual Private Database.
-It runs on Oracle 19c and later; CI tests it on Oracle Database 23ai Free
-with utPLSQL, with line coverage, compiler warnings and a benchmark in
-every run.
+It runs on Oracle 19c and later; CI tests it on Oracle Database Free
+(the image tagged 23, which is now 26ai, release 23.26) with utPLSQL,
+with line coverage, compiler warnings and a benchmark in every run.
 
 `docs/design.md` has the data model and why it's built the way it is,
 `docs/rca.md` the root cause analyses of three problems found in CI, and
@@ -199,7 +199,7 @@ select * from problems;
 select * from usage_by_destination;
 ```
 
-With Docker or Podman, `make db` starts Oracle Free 23ai and `make ci`
+With Docker or Podman, `make db` starts Oracle Database Free and `make ci`
 installs utPLSQL and billrun, runs the tests and the benchmark: the same
 `scripts/ci.sh` that GitHub Actions runs.
 
