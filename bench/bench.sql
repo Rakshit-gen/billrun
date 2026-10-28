@@ -11,6 +11,7 @@ whenever sqlerror exit failure rollback
 set verify off
 set feedback off
 set serveroutput on
+set linesize 200
 
 declare
   c_records    constant pls_integer := &1;
