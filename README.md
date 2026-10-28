@@ -12,7 +12,7 @@ with utPLSQL, with line coverage, compiler warnings and a benchmark in
 every run.
 
 `docs/design.md` has the data model and why it's built the way it is,
-`docs/rca.md` the root cause analyses of two problems found in CI, and
+`docs/rca.md` the root cause analyses of three problems found in CI, and
 `CHANGELOG.md` what's in each release.
 
 ## How it works
