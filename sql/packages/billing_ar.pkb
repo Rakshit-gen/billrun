@@ -196,22 +196,26 @@ create or replace package body billing_ar as
       with open_invoices as (
         -- Only money received by p_as_of counts, so a past date gives
         -- the picture as it was then.
+        -- Allocations are summed once and joined, not looked up per
+        -- invoice or payment: with too few rows sampled the optimizer
+        -- full scanned payments or invoices for every row (docs/rca.md).
         select i.customer_id, l_as_of - i.due_date as overdue,
-               i.total - nvl((select sum(a.amount)
-                                from payment_allocations a
-                                join payments p on p.payment_id = a.payment_id
-                               where a.invoice_id = i.invoice_id
-                                 and p.received_on <= l_as_of), 0) as open_amount
+               i.total - nvl(paid.amount, 0) as open_amount
           from invoices i
+          left join (select a.invoice_id, sum(a.amount) as amount
+                       from payment_allocations a
+                       join payments p on p.payment_id = a.payment_id
+                      where p.received_on <= l_as_of
+                      group by a.invoice_id) paid on paid.invoice_id = i.invoice_id
          where i.issued_at <= l_as_of
       ), unallocated as (
-        select p.customer_id,
-               sum(p.amount - nvl((select sum(a.amount)
-                                     from payment_allocations a
-                                     join invoices i on i.invoice_id = a.invoice_id
-                                    where a.payment_id = p.payment_id
-                                      and i.issued_at <= l_as_of), 0)) as amount
+        select p.customer_id, sum(p.amount - nvl(used.amount, 0)) as amount
           from payments p
+          left join (select a.payment_id, sum(a.amount) as amount
+                       from payment_allocations a
+                       join invoices i on i.invoice_id = a.invoice_id
+                      where i.issued_at <= l_as_of
+                      group by a.payment_id) used on used.payment_id = p.payment_id
          where p.received_on <= l_as_of
          group by p.customer_id
       ), buckets as (
