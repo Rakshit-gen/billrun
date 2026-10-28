@@ -245,9 +245,66 @@ Check: every invoice equals the sum of its lines plus tax.
 
 ## Performance
 
-`bench/bench.sql` runs in CI on every push: a generated month of 50,000
-call records for 2,000 customers, on the GitHub runner's Oracle Free.
-From run 40538698448:
+The bench workflow (`.github/workflows/bench.yml`) runs `bench/bench.sql`
+on every push to main at three sizes of generated month, each with about 1%
+of records sent bad on purpose. Each rater runs three times on the same
+month, from unrated each time, and every run has to rate every record
+the same as the first run of `rate_pending_slow` (a hash over each
+record's status, tariff, charged units and amount), or the benchmark
+fails. All the numbers below are from run 40694601117, on 28 October
+2026, at commit 2cc4877.
+
+Where it ran: a GitHub-hosted runner with 4 CPUs (AMD EPYC 7763) and
+15 GB, and Oracle AI Database 26ai Free 23.26.3 in a container, which
+uses at most 2 CPUs (`cpu_count` 2), a 1,536 MB SGA and a 512 MB PGA
+target. It's a shared machine, so a rerun can be off by a few percent.
+
+Raters, median of three runs (fastest to slowest in brackets):
+
+| records | customers | rate_pending_slow | rate_pending | rate_parallel, 2 jobs |
+|---:|---:|---:|---:|---:|
+| 9,889 | 500 | 2.36 s (2.25 to 2.60) | 0.73 s (0.72 to 0.76) | 3.03 s (3.02 to 3.42) |
+| 49,499 | 2,000 | 11.54 s (11.38 to 12.32) | 3.34 s (3.32 to 3.41) | 6.03 s (6.03 to 6.07) |
+| 198,005 | 8,000 | 47.61 s (47.39 to 49.81) | 15.77 s (15.67 to 15.94) | 18.07 s (15.13 to 18.08) |
+
+The record counts are what was rated; the rest of the 10,000, 50,000
+and 200,000 failed on purpose. The batch rater is 3.0x to 3.5x the
+row by row one at every size. The parallel rater takes 3.03 s on 10,000
+records, where the batch rater takes 0.73 s; the difference is most
+likely starting its scheduler jobs. It's slower than rating row by row
+at that size, and it doesn't pass the batch rater at any of these sizes
+on a database limited to two CPUs.
+
+The other steps, one run each:
+
+| step | 10,000 records | 50,000 records | 200,000 records |
+|---|---:|---:|---:|
+| stage (generate) | 0.16 s | 0.75 s | 2.84 s |
+| load_staged | 1.18 s | 5.06 s | 21.80 s |
+| bill_cycle | 0.49 s, 500 invoices | 1.51 s, 2,000 invoices | 6.04 s, 8,000 invoices |
+| record_payment, 3 in 4 invoices | 0.19 s, 375 | 0.51 s, 1,500 | 2.38 s, 6,000 |
+| run_dunning, 61 days past due | 0.07 s, 375 steps | 0.18 s, 1,500 steps | 0.78 s, 6,000 steps |
+| aging | 0.21 s, 125 customers | 0.04 s, 500 | 0.10 s, 2,000 |
+
+Every step grows about in line with its rows. Aging didn't before
+commit 2cc4877: 4.16 s for 2,000 customers, from a full table scan per
+invoice and per payment (`docs/rca.md`, 3). The ci workflow runs the
+50,000 record size once more after the tests, on the database the tests
+used; there `bill_cycle` took 3.33 s in run 40691322953, not 1.51 s.
+
+To run it against your own database, after `scripts/install.sh`:
+
+```
+SIZES="10000:500:3 50000:2000:3 200000:8000:3" ./scripts/bench.sh
+```
+
+or with sqlplus, one size at a time:
+`@bench/bench.sql 50000 2000 3`.
+
+### Earlier numbers
+
+Before the bench workflow, `ci.sh` ran one size once. From run
+40538698448:
 
 | step | rows | time | rows/s |
 |---|---:|---:|---:|
@@ -257,11 +314,6 @@ From run 40538698448:
 | rate_pending | 49,499 | 3.42 s | 14,473 |
 | rate_parallel, 2 jobs | 49,499 | 6.39 s | 7,746 |
 | bill_cycle | 2,000 invoices | 3.30 s | 606 |
-
-The batch rater is 3.5x the row by row one. The parallel rater is slower
-than the batch rater here. Oracle Free uses at most two CPU threads,
-and on 50,000 records starting the scheduler jobs and committing per
-chunk most likely costs more than a second thread wins back. It's there for a database with cores to spare.
 
 The bill run took 246 seconds in the first runs, 244 of them in the
 insert of the invoice lines. The cursor had first been parsed during the
